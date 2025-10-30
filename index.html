@@ -45,16 +45,12 @@
 </head>
 <body>
     <script>
-    if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-            navigator.serviceWorker.register('/sw.js')
-                .then(registration => {
-                    console.log('Service Worker registered:', registration);
-                })
-                .catch(error => {
-                    console.error('Service Worker registration failed:', error);
-                });
-        });
+        if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js', { scope: '/' })
+          .then(reg => console.log('SW registered:', reg.scope))
+          .catch(err => console.error('SW registration failed:', err));
+      });
     }
     </script>
     <div id="hud"></div>
@@ -1747,6 +1743,7 @@
 </body>
 
 </html>\
+
 
 
 
