@@ -424,7 +424,7 @@
         
         // Load GLTF for station (preserve original materials/textures)
         const loader = new GLTFLoader();
-        loader.load('https://github.com/nasa/NASA-3D-Resources/blob/11ebb4ee043715aefbba6aeec8a61746fad67fa7/3D%20Models/Gateway/Gateway%20Core.glb', (gltf) => {
+        loader.load('https://raw.githubusercontent.com/nasa/NASA-3D-Resources/11ebb4ee043715aefbba6aeec8a61746fad67fa7/3D%20Models/Gateway/Gateway%20Core.glb', (gltf) => {
             scene.remove(station); // Remove placeholder
             stationBboxHelper.visible = false; // Hide helper temporarily
             scene.remove(stationBboxHelper);
@@ -1734,4 +1734,5 @@
 </body>
 
 </html>\
+
 
