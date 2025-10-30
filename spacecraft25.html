@@ -1,0 +1,1735 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Satellite Simulator</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #000011; font-family: Arial, sans-serif; }
+        #hud, #controls { position: absolute; color: white; background: rgba(0,0,0,0.5); padding: 10px; }
+        #hud { left: 10px; top: 10px; }
+        #controls { bottom: 10px; left: 10px; }
+        #file-input { margin-top: 10px; }
+        #collision-boxes { margin-top: 10px; display: none; }
+        #collision-boxes.visible { display: block; }
+        #collision-boxes textarea { width: 100%; height: 100px; margin-top: 5px; }
+        #collision-boxes-buttons { margin-top: 5px; }
+        #collision-boxes-buttons button { margin-right: 5px; }
+        .collision-box { position: absolute; color: white; background: rgba(255,0,255,0.3); border: 1px solid #ff00ff; }
+        
+        #docking-editor { position: absolute; right: 10px; top: 10px; width: 350px; display: none; }
+        #docking-editor.visible { display: block; }
+        #docking-editor-controls { margin-top: 10px; }
+        .slider-container { margin-bottom: 10px; }
+        .slider-label { display: inline-block; width: 100px; }
+        .slider { width: 100px; }
+        .slider-input { width: 60px; margin-left: 5px; }
+        
+        #docking-box-config { margin-top: 15px; padding: 10px; background: rgba(0,0,0,0.3); border: 1px solid #444; }
+        #docking-box-config h3 { margin-top: 0; }
+        
+        #docking-port-display { margin-top: 15px; }
+        #docking-port-display h3 { margin-top: 0; }
+        
+        .tab-container { display: flex; margin-bottom: 10px; }
+        .tab { padding: 8px 15px; background: #333; cursor: pointer; border: 1px solid #555; }
+        .tab.active { background: #555; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        
+        #docked-message { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); 
+                          color: #00ff00; font-size: 24px; font-weight: bold; display: none; }
+        
+        .button { background: #444; color: white; border: none; padding: 5px 10px; margin: 5px 0; cursor: pointer; }
+        .button:hover { background: #555; }
+    </style>
+</head>
+<body>
+    <div id="hud"></div>
+    <div id="controls">
+        Thrust: W/S forward/back, A/D left/right, Q/E up/down<br>
+        Attitude: I/K pitch, L/J yaw, U/O roll<br>
+        `+R: reset, `+P: pause, C: switch camera (first-person/orbit/selfie stick)<br>
+        B: toggle bounding boxes and show/hide collision editor<br>
+        1: toggle docking editor<br>
+        G: undock (when docked)<br>
+        Space: emergency stop<br>
+        In orbit/selfie mode: Mouse drag to rotate view, scroll to zoom<br>
+        <div id="file-input">
+            <label for="satellite-model">Load satellite model (STL/GLB):</label><br>
+            <input type="file" id="satellite-model" accept=".stl,.glb,.gltf">
+        </div>
+        <div id="collision-boxes">
+            <label for="collision-boxes-input">Custom collision boxes (JSON):</label><br>
+            <textarea id="collision-boxes-input" placeholder='[{"center": [0,0,0], "size": [2,2,2]}]'></textarea>
+            <div id="collision-boxes-buttons">
+                <button id="apply-collision-boxes">Apply Collision Boxes</button>
+                <button id="reset-collision-boxes">Reset to Default</button>
+                <button id="export-collision-boxes">Export to File</button>
+                <label for="load-collision-boxes" style="display: inline-block; margin-left: 10px;">
+                    <input type="file" id="load-collision-boxes" accept=".json" style="display: none;">
+                    <span style="background: #444; padding: 5px 10px; cursor: pointer; border-radius: 3px;">Load from File</span>
+                </label>
+            </div>
+        </div>
+    </div>
+    
+    <div id="docked-message">DOCKED</div>
+    
+    <div id="docking-editor">
+        <h3>Docking Editor</h3>
+        <div class="tab-container">
+            <div class="tab active" data-tab="docking-port">Docking Port</div>
+            <div class="tab" data-tab="docking-box">Docking Box</div>
+            <div class="tab" data-tab="ship-position">Ship Position</div>
+        </div>
+        
+        <div id="docking-port" class="tab-content active">
+            <h3>Spacecraft Model</h3>
+            <div id="docking-port-display">
+                <label for="spacecraft-model">Load spacecraft model (STL/GLB):</label><br>
+                <input type="file" id="spacecraft-model" accept=".stl,.glb,.gltf">
+                <div id="spacecraft-info">No model loaded</div>
+            </div>
+            
+            <h3>Docking Port Model</h3>
+            <div id="docking-port-display">
+                <label for="docking-port-model">Load docking port model (STL/GLB):</label><br>
+                <input type="file" id="docking-port-model" accept=".stl,.glb,.gltf">
+                <div id="docking-port-info">No model loaded</div>
+            </div>
+            
+            <h3>Docking Port Position</h3>
+            <div id="docking-port-position">
+                <div class="slider-container">
+                    <span class="slider-label">Position X:</span>
+                    <input type="range" id="docking-port-pos-x" class="slider" min="-20" max="20" step="0.1" value="0">
+                    <input type="number" id="docking-port-pos-x-input" class="slider-input" value="0" step="0.1">
+                </div>
+                <div class="slider-container">
+                    <span class="slider-label">Position Y:</span>
+                    <input type="range" id="docking-port-pos-y" class="slider" min="-20" max="20" step="0.1" value="0">
+                    <input type="number" id="docking-port-pos-y-input" class="slider-input" value="0" step="0.1">
+                </div>
+                <div class="slider-container">
+                    <span class="slider-label">Position Z:</span>
+                    <input type="range" id="docking-port-pos-z" class="slider" min="-20" max="20" step="0.1" value="0">
+                    <input type="number" id="docking-port-pos-z-input" class="slider-input" value="0" step="0.1">
+                </div>
+            </div>
+            
+            <h3>Docking Port Rotation</h3>
+            <div id="docking-port-rotation">
+                <div class="slider-container">
+                    <span class="slider-label">Rotation X:</span>
+                    <input type="range" id="docking-port-rot-x" class="slider" min="-180" max="180" step="1" value="0">
+                    <input type="number" id="docking-port-rot-x-input" class="slider-input" value="0" step="1">
+                </div>
+                <div class="slider-container">
+                    <span class="slider-label">Rotation Y:</span>
+                    <input type="range" id="docking-port-rot-y" class="slider" min="-180" max="180" step="1" value="0">
+                    <input type="number" id="docking-port-rot-y-input" class="slider-input" value="0" step="1">
+                </div>
+                <div class="slider-container">
+                    <span class="slider-label">Rotation Z:</span>
+                    <input type="range" id="docking-port-rot-z" class="slider" min="-180" max="180" step="1" value="0">
+                    <input type="number" id="docking-port-rot-z-input" class="slider-input" value="0" step="1">
+                </div>
+            </div>
+            
+            <h3>Docking Port Scale</h3>
+            <div id="docking-port-scale">
+                <div class="slider-container">
+                    <span class="slider-label">Scale:</span>
+                    <input type="range" id="docking-port-scale-slider" class="slider" min="0.1" max="5" step="0.1" value="1">
+                    <input type="number" id="docking-port-scale-input" class="slider-input" value="1" step="0.1">
+                </div>
+            </div>
+        </div>
+        
+        <div id="docking-box" class="tab-content">
+            <h3>Docking Box Configuration</h3>
+            <div id="docking-box-config">
+                <div class="slider-container">
+                    <span class="slider-label">Size X:</span>
+                    <input type="range" id="docking-box-size-x" class="slider" min="0.1" max="10" step="0.1" value="2">
+                    <input type="number" id="docking-box-size-x-input" class="slider-input" value="2" step="0.1">
+                </div>
+                <div class="slider-container">
+                    <span class="slider-label">Size Y:</span>
+                    <input type="range" id="docking-box-size-y" class="slider" min="0.1" max="10" step="0.1" value="2">
+                    <input type="number" id="docking-box-size-y-input" class="slider-input" value="2" step="0.1">
+                </div>
+                <div class="slider-container">
+                    <span class="slider-label">Size Z:</span>
+                    <input type="range" id="docking-box-size-z" class="slider" min="0.1" max="10" step="0.1" value="2">
+                    <input type="number" id="docking-box-size-z-input" class="slider-input" value="2" step="0.1">
+                </div>
+            </div>
+        </div>
+        
+        <div id="ship-position" class="tab-content">
+            <h3>Ship Position</h3>
+            <p>Record the current position as the docked position:</p>
+            <button id="record-docked-position" class="button">Record Current Position</button>
+            <div id="docked-position-info">
+                <p>Position: <span id="docked-position-display">Not recorded</span></p>
+                <p>Rotation: <span id="docked-rotation-display">Not recorded</span></p>
+            </div>
+        </div>
+        
+        <div id="docking-editor-buttons" style="margin-top: 15px;">
+            <button id="apply-docking-config">Apply Configuration</button>
+            <button id="save-docking-config">Save Configuration</button>
+            <label for="load-docking-config" style="display: inline-block; margin-left: 10px;">
+                <input type="file" id="load-docking-config" accept=".json" style="display: none;">
+                <span style="background: #444; padding: 5px 10px; cursor: pointer; border-radius: 3px;">Load Configuration</span>
+            </label>
+        </div>
+    </div>
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.169.0/build/three.module.js"
+            }
+        }
+    </script>
+    <script type="module">
+        import * as THREE from 'three';
+        import { GLTFLoader } from 'https://unpkg.com/three@0.169.0/examples/jsm/loaders/GLTFLoader.js';
+        import { STLLoader } from 'https://unpkg.com/three@0.169.0/examples/jsm/loaders/STLLoader.js';
+        import { OrbitControls } from 'https://unpkg.com/three@0.169.0/examples/jsm/controls/OrbitControls.js';
+
+        // Scene setup
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x000011); // Dark blue space background
+
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        // Lights
+        const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
+        scene.add(ambientLight);
+
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+        directionalLight.position.set(50, 50, 50);
+        scene.add(directionalLight);
+
+        // Controls
+        const keys = {};
+        window.addEventListener('keydown', (e) => { 
+            const key = e.key.toLowerCase();
+            keys[key] = true;
+            if (key === 'control') keys['control'] = true;
+        });
+        window.addEventListener('keyup', (e) => { 
+            const key = e.key.toLowerCase();
+            keys[key] = false;
+            if (key === 'control') keys['control'] = false;
+        });
+
+        // Orbit controls for third-person
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.rotateSpeed = 0.5; // Reduced sensitivity for smoother mouse rotation
+        controls.zoomSpeed = 1.0; // Default zoom speed
+        controls.minDistance = 0.1;
+        controls.maxDistance = 100;
+        controls.target.set(-2.5, 0, 4.5); // Initial target at satellite start
+        camera.position.set(-2.5, 0.5, 7.5); // Initial camera position behind satellite
+        controls.update();
+
+        // Store initial camera offset relative to satellite
+        const cameraOffset = new THREE.Vector3().subVectors(camera.position, controls.target);
+
+        // Track previous target position for smooth following
+        const previousTarget = controls.target.clone();
+
+        // Manual mouse handling for selfie mode
+        let isDragging = false;
+        let mouseDownX = 0;
+        let mouseDownY = 0;
+
+        function onMouseDown(e) {
+            if (cameraMode !== 2) return;
+            isDragging = true;
+            mouseDownX = e.clientX;
+            mouseDownY = e.clientY;
+        }
+
+        function onMouseUp(e) {
+            if (cameraMode !== 2) return;
+            isDragging = false;
+        }
+
+        function onMouseMove(e) {
+            if (cameraMode !== 2 || !isDragging) return;
+            const deltaX = e.clientX - mouseDownX;
+            const deltaY = e.clientY - mouseDownY;
+            const spherical = controls._spherical;
+            spherical.theta -= (2 * Math.PI * deltaX / renderer.domElement.clientWidth) * controls.rotateSpeed;
+            spherical.phi += (2 * Math.PI * deltaY / renderer.domElement.clientHeight) * controls.rotateSpeed;
+            spherical.phi = Math.max(0.0001, Math.min(Math.PI - 0.0001, spherical.phi));
+            mouseDownX = e.clientX;
+            mouseDownY = e.clientY;
+        }
+
+        function onWheel(e) {
+            if (cameraMode !== 2) return;
+            e.preventDefault();
+            const scale = e.deltaY / 100.0 * controls.zoomSpeed;
+            controls._spherical.radius *= (1 + scale);
+            controls._spherical.radius = Math.max(controls.minDistance, Math.min(controls.maxDistance, controls._spherical.radius));
+        }
+
+        // Add manual event listeners
+        renderer.domElement.addEventListener('mousedown', onMouseDown);
+        renderer.domElement.addEventListener('mouseup', onMouseUp);
+        renderer.domElement.addEventListener('mousemove', onMouseMove);
+        renderer.domElement.addEventListener('wheel', onWheel, { passive: false });
+
+        // Function to set spherical from vector
+        function setSphericalFromVector(vec) {
+            const radius = vec.length();
+            if (radius === 0) return;
+            const v = vec.clone().normalize();
+            const phi = Math.acos(THREE.MathUtils.clamp(v.y, -1, 1));
+            const theta = Math.atan2(v.z, v.x);
+            controls._spherical.radius = radius;
+            controls._spherical.phi = phi;
+            controls._spherical.theta = theta;
+        }
+
+        // Simulation state
+        let state = [-2.5, 0, 4.5, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0]; // px,py,pz,vx,vy,vz,qw,qx,qy,qz,ox,oy,oz (offset to 5)
+        const position = new THREE.Vector3();
+        const velocity = new THREE.Vector3();
+        const quaternion = new THREE.Quaternion();
+        const angularVelocity = new THREE.Vector3();
+
+        const thrustForce = 0.4; // Increased thrust
+        const torqueMag = 0.08; // Increased reaction wheel torque
+
+        let paused = false;
+        let cameraMode = 1; // 0: first-person, 1: orbit, 2: selfie stick
+        let showBoundingBoxes = false; // Toggle for bounding boxes
+        let lastKeys = { p: false, r: false, c: false, b: false };
+
+        const clock = new THREE.Clock();
+
+        // Satellite
+        const satGeo = new THREE.BoxGeometry(0.5, 0.5, 1);
+        const satMat = new THREE.MeshStandardMaterial({ color: 0x00ff00 });
+        let satellite = new THREE.Mesh(satGeo, satMat);
+        scene.add(satellite);
+        let satelliteModelName = "Default Box";
+
+        // Create bounding box helper for satellite
+        let satBboxHelper = new THREE.BoxHelper(satellite, 0xffff00);
+        satBboxHelper.visible = false;
+        scene.add(satBboxHelper);
+
+        // Station (placeholder box if glb fails)
+        let station = new THREE.Mesh(new THREE.BoxGeometry(2, 2, 2), new THREE.MeshStandardMaterial({ color: 0xff0000 }));
+        station.position.set(0, 0, 0);
+        scene.add(station);
+        
+        // Initialize with empty collision boxes array
+        let stationCollisionBoxes = [];
+        
+        // Create bounding box helper for station
+        let stationBboxHelper = new THREE.BoxHelper(station, 0xff00ff);
+        stationBboxHelper.visible = false;
+        scene.add(stationBboxHelper);
+        
+        function updateStationCollisionBoxes() {
+            // Clear existing helpers from the scene
+            stationCollisionBoxes.forEach(box => {
+                if (box.helper) {
+                    scene.remove(box.helper);
+                }
+            });
+            
+            // Create new collision boxes based on current definitions
+            stationCollisionBoxes.forEach(boxDef => {
+                // These are the user's input values, treated as a world-axis-aligned offset
+                const offsetCenter = boxDef.center;
+                const localSize = boxDef.size;
+
+                // --- 1. STORE THE WORLD-SPACE BOX FOR COLLISION ---
+                // Calculate the world center by adding the offset to the station's position.
+                // This ignores the station's rotation, keeping the box aligned with the world axes.
+                const worldCenter = station.position.clone().add(offsetCenter);
+                
+                // Store the world-space box for collision detection
+                boxDef.worldBox = new THREE.Box3().setFromCenterAndSize(worldCenter, localSize);
+
+                // --- 2. VISUALIZATION LOGIC ---
+                // The visual helper is a global, unrotated box.
+                // We use the same worldCenter and localSize to create it.
+                const boxGeometry = new THREE.BoxGeometry(
+                    Math.abs(localSize.x), 
+                    Math.abs(localSize.y), 
+                    Math.abs(localSize.z)
+                );
+                
+                const edges = new THREE.EdgesGeometry(boxGeometry);
+                const lineMaterial = new THREE.LineBasicMaterial({ color: 0xff00ff });
+                const helper = new THREE.LineSegments(edges, lineMaterial);
+
+                helper.position.copy(worldCenter);
+                helper.visible = showBoundingBoxes;
+                scene.add(helper);
+                boxDef.helper = helper;
+            });
+        }
+        
+        // Docking port setup
+        let dockingPort = null;
+        let dockingPortHelper = null;
+        let dockingPortModelName = "None";
+        let dockingPortPosition = new THREE.Vector3(0, 0, 0);
+        let dockingPortRotation = new THREE.Euler(0, 0, 0);
+        let dockingPortScale = 1;
+        let dockingPortGroup = new THREE.Group();
+        scene.add(dockingPortGroup);
+        
+        // Docking box setup
+        let dockingBox = new THREE.Mesh(
+            new THREE.BoxGeometry(2, 2, 2),
+            new THREE.MeshBasicMaterial({ 
+                color: 0x00ffff, 
+                wireframe: true,
+                transparent: true,
+                opacity: 0.5
+            })
+        );
+        dockingBox.visible = false;
+        scene.add(dockingBox);
+        
+        // Docked position
+        let dockedPosition = new THREE.Vector3(0, 0, 5);
+        let dockedRotation = new THREE.Euler(0, 0, 0);
+        
+        // Ship position relative to docking port
+        let shipOffset = new THREE.Vector3(0, 0, 5);
+        let shipRotationOffset = new THREE.Euler(0, 0, 0);
+        
+        // Docking state
+        let isDocked = false;
+        let canAutoDock = true;
+        let dockingPortEnabled = false;
+        
+        // Load GLTF for station (preserve original materials/textures)
+        const loader = new GLTFLoader();
+        loader.load('gatewaycore.glb', (gltf) => {
+            scene.remove(station); // Remove placeholder
+            stationBboxHelper.visible = false; // Hide helper temporarily
+            scene.remove(stationBboxHelper);
+            
+            station = gltf.scene;
+            //succesive rotations about new axis
+            let rot1 = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI/180*-25);
+            station.quaternion.multiply(rot1);
+            let rot2 = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI/180*-10);
+            station.quaternion.multiply(rot2);  // Builds on the previous rotation
+            station.position.set(0, 0, 0);
+            scene.add(station);
+            
+            // Try to load default collision boxes after station is loaded
+            loadDefaultCollisionBoxes();
+        }, undefined, (error) => {
+            console.error('Failed to load gatewaycore.glb:', error);
+            // Keep placeholder and try to load default collision boxes
+            loadDefaultCollisionBoxes();
+        });
+
+        // File input for spacecraft model (only in docking editor)
+        const spacecraftFileInput = document.getElementById('spacecraft-model');
+        spacecraftFileInput.addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            if (!file) return;
+            
+            const fileName = file.name;
+            satelliteModelName = fileName;
+            
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const arrayBuffer = e.target.result;
+                
+                if (fileName.toLowerCase().endsWith('.stl')) {
+                    const stlLoader = new STLLoader();
+                    const geometry = stlLoader.parse(arrayBuffer);
+                    
+                    // Create a new mesh with the loaded geometry
+                    scene.remove(satellite);
+                    satBboxHelper.visible = false; // Hide helper temporarily
+                    scene.remove(satBboxHelper);
+                    
+                    const material = new THREE.MeshStandardMaterial({ 
+                        color: 0x00ff00,
+                        metalness: 0.3,
+                        roughness: 0.4
+                    });
+                    satellite = new THREE.Mesh(geometry, material);
+                    
+                    // Scale the model to fit reasonably in the scene
+                    const box = new THREE.Box3().setFromObject(satellite);
+                    const size = box.getSize(new THREE.Vector3()).length();
+                    const center = box.getCenter(new THREE.Vector3());
+                    const scale = 2 / size; // Scale to fit in a 2x2x2 box
+                    satellite.scale.set(scale, scale, scale);
+                    satellite.position.sub(center.multiplyScalar(scale));
+                    
+                    scene.add(satellite);
+                    
+                    // Create new bounding box helper for the loaded model
+                    const newSatBboxHelper = new THREE.BoxHelper(satellite, 0xffff00);
+                    newSatBboxHelper.visible = showBoundingBoxes;
+                    scene.add(newSatBboxHelper);
+                    satBboxHelper = newSatBboxHelper;
+                    
+                    document.getElementById('spacecraft-info').textContent = `Loaded: ${fileName}`;
+                } else if (fileName.toLowerCase().endsWith('.glb') || fileName.toLowerCase().endsWith('.gltf')) {
+                    const gltfLoader = new GLTFLoader();
+                    gltfLoader.parse(arrayBuffer, '', (gltf) => {
+                        scene.remove(satellite);
+                        satBboxHelper.visible = false; // Hide helper temporarily
+                        scene.remove(satBboxHelper);
+                        
+                        // Clone the scene to avoid issues with the original
+                        satellite = gltf.scene.clone();
+                        
+                        // Scale the model to fit reasonably in the scene
+                        const box = new THREE.Box3().setFromObject(satellite);
+                        const size = box.getSize(new THREE.Vector3()).length();
+                        const center = box.getCenter(new THREE.Vector3());
+                        const scale = 2 / size; // Scale to fit in a 2x2x2 box
+                        satellite.scale.set(scale, scale, scale);
+                        satellite.position.sub(center.multiplyScalar(scale));
+                        
+                        scene.add(satellite);
+                        
+                        // Create new bounding box helper for the loaded model
+                        const newSatBboxHelper = new THREE.BoxHelper(satellite, 0xffff00);
+                        newSatBboxHelper.visible = showBoundingBoxes;
+                        scene.add(newSatBboxHelper);
+                        satBboxHelper = newSatBboxHelper;
+                        
+                        document.getElementById('spacecraft-info').textContent = `Loaded: ${fileName}`;
+                    }, (error) => {
+                        console.error('Failed to load GLTF file:', error);
+                    });
+                }
+            };
+            
+            if (fileName.toLowerCase().endsWith('.stl')) {
+                reader.readAsArrayBuffer(file);
+            } else if (fileName.toLowerCase().endsWith('.glb') || fileName.toLowerCase().endsWith('.gltf')) {
+                reader.readAsArrayBuffer(file);
+            }
+        });
+
+        // Docking port file input
+        const dockingPortFileInput = document.getElementById('docking-port-model');
+        dockingPortFileInput.addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            if (!file) return;
+            
+            const fileName = file.name;
+            dockingPortModelName = fileName;
+            
+            // Remove existing docking port
+            if (dockingPort) {
+                dockingPortGroup.remove(dockingPort);
+                if (dockingPortHelper) {
+                    scene.remove(dockingPortHelper);
+                }
+            }
+            
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const arrayBuffer = e.target.result;
+                
+                if (fileName.toLowerCase().endsWith('.stl')) {
+                    const stlLoader = new STLLoader();
+                    const geometry = stlLoader.parse(arrayBuffer);
+                    
+                    const material = new THREE.MeshStandardMaterial({ 
+                        color: 0x00ffff,
+                        metalness: 0.3,
+                        roughness: 0.4
+                    });
+                    dockingPort = new THREE.Mesh(geometry, material);
+                    
+                    // Scale the model to fit reasonably in the scene
+                    const box = new THREE.Box3().setFromObject(dockingPort);
+                    const size = box.getSize(new THREE.Vector3()).length();
+                    const center = box.getCenter(new THREE.Vector3());
+                    const scale = 1 / size; // Scale to reasonable size
+                    dockingPort.scale.set(scale, scale, scale);
+                    dockingPort.position.sub(center.multiplyScalar(scale));
+                    
+                    dockingPortGroup.add(dockingPort);
+                    updateDockingPortHelper();
+                    
+                    document.getElementById('docking-port-info').textContent = `Loaded: ${fileName}`;
+                } else if (fileName.toLowerCase().endsWith('.glb') || fileName.toLowerCase().endsWith('.gltf')) {
+                    const gltfLoader = new GLTFLoader();
+                    gltfLoader.parse(arrayBuffer, '', (gltf) => {
+                        dockingPort = gltf.scene.clone();
+                        
+                        // Scale the model to fit reasonably in the scene
+                        const box = new THREE.Box3().setFromObject(dockingPort);
+                        const size = box.getSize(new THREE.Vector3()).length();
+                        const center = box.getCenter(new THREE.Vector3());
+                        const scale = 1 / size; // Scale to reasonable size
+                        dockingPort.scale.set(scale, scale, scale);
+                        dockingPort.position.sub(center.multiplyScalar(scale));
+                        
+                        dockingPortGroup.add(dockingPort);
+                        updateDockingPortHelper();
+                        
+                        document.getElementById('docking-port-info').textContent = `Loaded: ${fileName}`;
+                    }, (error) => {
+                        console.error('Failed to load GLTF file:', error);
+                    });
+                }
+            };
+            
+            if (fileName.toLowerCase().endsWith('.stl')) {
+                reader.readAsArrayBuffer(file);
+            } else if (fileName.toLowerCase().endsWith('.glb') || fileName.toLowerCase().endsWith('.gltf')) {
+                reader.readAsArrayBuffer(file);
+            }
+        });
+        
+        // Update docking port helper
+        function updateDockingPortHelper() {
+            if (dockingPortHelper) {
+                scene.remove(dockingPortHelper);
+            }
+            
+            if (dockingPort) {
+                dockingPortHelper = new THREE.BoxHelper(dockingPort, 0x00ffff);
+                dockingPortHelper.visible = showBoundingBoxes;
+                scene.add(dockingPortHelper);
+            }
+        }
+        
+        // Tab switching for docking editor
+        const tabs = document.querySelectorAll('.tab');
+        const tabContents = document.querySelectorAll('.tab-content');
+        
+        tabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                const tabId = tab.getAttribute('data-tab');
+                
+                // Update active tab
+                tabs.forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+                
+                // Update active content
+                tabContents.forEach(content => {
+                    content.classList.remove('active');
+                    if (content.id === tabId) {
+                        content.classList.add('active');
+                    }
+                });
+            });
+        });
+        
+        // Slider event listeners for docking port position
+        const dockingPortPosX = document.getElementById('docking-port-pos-x');
+        const dockingPortPosY = document.getElementById('docking-port-pos-y');
+        const dockingPortPosZ = document.getElementById('docking-port-pos-z');
+        const dockingPortPosXInput = document.getElementById('docking-port-pos-x-input');
+        const dockingPortPosYInput = document.getElementById('docking-port-pos-y-input');
+        const dockingPortPosZInput = document.getElementById('docking-port-pos-z-input');
+        
+        function updateDockingPortPosition() {
+            dockingPortPosition.x = parseFloat(dockingPortPosX.value);
+            dockingPortPosition.y = parseFloat(dockingPortPosY.value);
+            dockingPortPosition.z = parseFloat(dockingPortPosZ.value);
+            dockingPortPosXInput.value = dockingPortPosition.x.toFixed(1);
+            dockingPortPosYInput.value = dockingPortPosition.y.toFixed(1);
+            dockingPortPosZInput.value = dockingPortPosition.z.toFixed(1);
+        }
+        
+        dockingPortPosX.addEventListener('input', (e) => {
+            const value = parseFloat(e.target.value);
+            dockingPortPosXInput.value = value.toFixed(1);
+            updateDockingPortPosition();
+        });
+        
+        dockingPortPosXInput.addEventListener('input', (e) => {
+            const value = parseFloat(e.target.value);
+            dockingPortPosX.value = value;
+            updateDockingPortPosition();
+        });
+        
+        dockingPortPosY.addEventListener('input', (e) => {
+            const value = parseFloat(e.target.value);
+            dockingPortPosYInput.value = value.toFixed(1);
+            updateDockingPortPosition();
+        });
+        
+        dockingPortPosYInput.addEventListener('input', (e) => {
+            const value = parseFloat(e.target.value);
+            dockingPortPosY.value = value;
+            updateDockingPortPosition();
+        });
+        
+        dockingPortPosZ.addEventListener('input', (e) => {
+            const value = parseFloat(e.target.value);
+            dockingPortPosZInput.value = value.toFixed(1);
+            updateDockingPortPosition();
+        });
+        
+        dockingPortPosZInput.addEventListener('input', (e) => {
+            const value = parseFloat(e.target.value);
+            dockingPortPosZ.value = value;
+            updateDockingPortPosition();
+        });
+        
+        // Slider event listeners for docking port rotation
+        const dockingPortRotX = document.getElementById('docking-port-rot-x');
+        const dockingPortRotY = document.getElementById('docking-port-rot-y');
+        const dockingPortRotZ = document.getElementById('docking-port-rot-z');
+        const dockingPortRotXInput = document.getElementById('docking-port-rot-x-input');
+        const dockingPortRotYInput = document.getElementById('docking-port-rot-y-input');
+        const dockingPortRotZInput = document.getElementById('docking-port-rot-z-input');
+        
+        function updateDockingPortRotation() {
+            dockingPortRotation.x = parseFloat(dockingPortRotX.value) * Math.PI / 180;
+            dockingPortRotation.y = parseFloat(dockingPortRotY.value) * Math.PI / 180;
+            dockingPortRotation.z = parseFloat(dockingPortRotZ.value) * Math.PI / 180;
+            dockingPortRotXInput.value = dockingPortRot.x * 180 / Math.PI;
+            dockingPortRotYInput.value = dockingPortRot.y * 180 / Math.PI;
+            dockingPortRotZInput.value = dockingPortRot.z * 180 / Math.PI;
+        }
+        
+        dockingPortRotX.addEventListener('input', (e) => {
+            const value = parseFloat(e.target.value);
+            dockingPortRotXInput.value = value;
+            updateDockingPortRotation();
+        });
+        
+        dockingPortRotXInput.addEventListener('input', (e) => {
+            const value = parseFloat(e.target.value);
+            dockingPortRotX.value = value;
+            updateDockingPortRotation();
+        });
+        
+        dockingPortRotY.addEventListener('input', (e) => {
+            const value = parseFloat(e.target.value);
+            dockingPortRotYInput.value = value;
+            updateDockingPortRotation();
+        });
+        
+        dockingPortRotYInput.addEventListener('input', (e) => {
+            const value = parseFloat(e.target.value);
+            dockingPortRotY.value = value;
+            updateDockingPortRotation();
+        });
+        
+        dockingPortRotZ.addEventListener('input', (e) => {
+            const value = parseFloat(e.target.value);
+            dockingPortRotZInput.value = value;
+            updateDockingPortRotation();
+        });
+        
+        dockingPortRotZInput.addEventListener('input', (e) => {
+            const value = parseFloat(e.target.value);
+            dockingPortRotZ.value = value;
+            updateDockingPortRotation();
+        });
+        
+        // Slider event listeners for docking port scale
+        const dockingPortScaleSlider = document.getElementById('docking-port-scale-slider');
+        const dockingPortScaleInput = document.getElementById('docking-port-scale-input');
+        
+        function updateDockingPortScale() {
+            dockingPortScale = parseFloat(dockingPortScaleSlider.value);
+            dockingPortScaleInput.value = dockingPortScale.toFixed(1);
+            
+            if (dockingPort) {
+                dockingPort.scale.set(dockingPortScale, dockingPortScale, dockingPortScale);
+            }
+        }
+        
+        dockingPortScaleSlider.addEventListener('input', (e) => {
+            const value = parseFloat(e.target.value);
+            dockingPortScaleInput.value = value.toFixed(1);
+            updateDockingPortScale();
+        });
+        
+        dockingPortScaleInput.addEventListener('input', (e) => {
+            const value = parseFloat(e.target.value);
+            dockingPortScaleSlider.value = value;
+            updateDockingPortScale();
+        });
+        
+        // Slider event listeners for docking box
+        const dockingBoxSizeX = document.getElementById('docking-box-size-x');
+        const dockingBoxSizeY = document.getElementById('docking-box-size-y');
+        const dockingBoxSizeZ = document.getElementById('docking-box-size-z');
+        const dockingBoxSizeXInput = document.getElementById('docking-box-size-x-input');
+        const dockingBoxSizeYInput = document.getElementById('docking-box-size-y-input');
+        const dockingBoxSizeZInput = document.getElementById('docking-box-size-z-input');
+        
+        function updateDockingBoxGeometry() {
+            const sizeX = parseFloat(dockingBoxSizeX.value);
+            const sizeY = parseFloat(dockingBoxSizeY.value);
+            const sizeZ = parseFloat(dockingBoxSizeZ.value);
+            
+            dockingBox.geometry.dispose();
+            dockingBox.geometry = new THREE.BoxGeometry(sizeX, sizeY, sizeZ);
+            
+            dockingBoxSizeXInput.value = sizeX.toFixed(1);
+            dockingBoxSizeYInput.value = sizeY.toFixed(1);
+            dockingBoxSizeZInput.value = sizeZ.toFixed(1);
+        }
+        
+        function updateDockingBoxFromInputs() {
+            const sizeX = parseFloat(dockingBoxSizeXInput.value);
+            const sizeY = parseFloat(dockingBoxSizeYInput.value);
+            const sizeZ = parseFloat(dockingBoxSizeZInput.value);
+            
+            dockingBoxSizeX.value = sizeX;
+            dockingBoxSizeY.value = sizeY;
+            dockingBoxSizeZ.value = sizeZ;
+            
+            updateDockingBoxGeometry();
+        }
+        
+        dockingBoxSizeX.addEventListener('input', (e) => {
+            updateDockingBoxGeometry();
+        });
+        
+        dockingBoxSizeY.addEventListener('input', (e) => {
+            updateDockingBoxGeometry();
+        });
+        
+        dockingBoxSizeZ.addEventListener('input', (e) => {
+            updateDockingBoxGeometry();
+        });
+        
+        dockingBoxSizeXInput.addEventListener('input', (e) => {
+            updateDockingBoxFromInputs();
+        });
+        
+        dockingBoxSizeYInput.addEventListener('input', (e) => {
+            updateDockingBoxFromInputs();
+        });
+        
+        dockingBoxSizeZInput.addEventListener('input', (e) => {
+            updateDockingBoxFromInputs();
+        });
+        
+        // Record docked position
+        document.getElementById('record-docked-position').addEventListener('click', () => {
+            dockedPosition.copy(position);
+            dockedRotation.copy(euler);
+            
+            document.getElementById('docked-position-display').textContent = 
+                `(${dockedPosition.x.toFixed(2)}, ${dockedPosition.y.toFixed(2)}, ${dockedPosition.z.toFixed(2)})`;
+            
+            document.getElementById('docked-rotation-display').textContent = 
+                `${(dockedRotation.x * 180 / Math.PI).toFixed(1)}°, ${(dockedRotation.y * 180 / Math.PI).toFixed(1)}°, ${(dockedRotation.z * 180 / Math.PI).toFixed(1)}°`;
+            
+            alert('Docked position recorded!');
+        });
+        
+        // Apply docking configuration
+        document.getElementById('apply-docking-config').addEventListener('click', () => {
+            dockingPortEnabled = true;
+            dockingPort.visible = true;
+            dockingBox.visible = true;
+            
+            // Update docking port position and rotation
+            dockingPortGroup.position.copy(dockingPortPosition);
+            dockingPortGroup.rotation.copy(dockingPortRotation);
+            
+            // Update docking box position and rotation
+            dockingBox.position.copy(dockingPortPosition);
+            dockingBox.rotation.copy(dockingPortRotation);
+            
+            alert('Docking configuration applied!');
+        });
+        
+        // Save docking configuration
+        document.getElementById('save-docking-config').addEventListener('click', () => {
+            const dockingConfig = {
+                spacecraftModel: satelliteModelName,
+                portModel: dockingPortModelName,
+                portPosition: {
+                    x: dockingPortPosition.x,
+                    y: dockingPortPosition.y,
+                    z: dockingPortPosition.z
+                },
+                portRotation: {
+                    x: dockingPortRotation.x * 180 / Math.PI,
+                    y: dockingPortRotation.y * 180 / Math.PI,
+                    z: dockingPortRotation.z * 180 / Math.PI
+                },
+                portScale: dockingPortScale,
+                boxSize: {
+                    x: parseFloat(dockingBoxSizeX.value),
+                    y: parseFloat(dockingBoxSizeY.value),
+                    z: parseFloat(dockingBoxSizeZ.value)
+                },
+                dockedPosition: {
+                    x: dockedPosition.x,
+                    y: dockedPosition.y,
+                    z: dockedPosition.z
+                },
+                dockedRotation: {
+                    x: dockedRotation.x * 180 / Math.PI,
+                    y: dockedRotation.y * 180 / Math.PI,
+                    z: dockedRotation.z * 180 / Math.PI
+                }
+            };
+            
+            const dataStr = JSON.stringify(dockingConfig, null, 2);
+            const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+            
+            const exportFileDefaultName = 'docking_configuration.json';
+            
+            const linkElement = document.createElement('a');
+            linkElement.setAttribute('href', dataUri);
+            linkElement.setAttribute('download', exportFileDefaultName);
+            linkElement.click();
+        });
+        
+        // Load docking configuration
+        document.getElementById('load-docking-config').addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            if (!file) return;
+            
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const dockingConfig = JSON.parse(e.target.result);
+                    
+                    // Load spacecraft model if specified
+                    if (dockingConfig.spacecraftModel && dockingConfig.spacecraftModel !== "Default Box") {
+                        console.log(`Loading spacecraft model: ${dockingConfig.spacecraftModel}`);
+                        document.getElementById('spacecraft-info').textContent = `Loaded: ${dockingConfig.spacecraftModel}`;
+                    }
+                    
+                    // Load docking port model if specified
+                    if (dockingConfig.portModel && dockingConfig.portModel !== "None") {
+                        console.log(`Loading docking port model: ${dockingConfig.portModel}`);
+                        document.getElementById('docking-port-info').textContent = `Loaded: ${dockingConfig.portModel}`;
+                    }
+                    
+                    // Update docking port position and rotation
+                    dockingPortPosition.set(
+                        dockingConfig.portPosition.x,
+                        dockingConfig.portPosition.y,
+                        dockingConfig.portPosition.z
+                    );
+                    
+                    dockingPortRotation.set(
+                        dockingConfig.portRotation.x * Math.PI / 180,
+                        dockingConfig.portRotation.y * Math.PI / 180,
+                        dockingConfig.portRotation.z * Math.PI / 180
+                    );
+                    
+                    // Update docking port scale
+                    dockingPortScale = dockingConfig.portScale || 1;
+                    dockingPortScaleSlider.value = dockingPortScale;
+                    dockingPortScaleInput.value = dockingPortScale.toFixed(1);
+                    
+                    // Update docking box size
+                    dockingBoxSizeX.value = dockingConfig.boxSize.x;
+                    dockingBoxSizeY.value = dockingConfig.boxSize.y;
+                    dockingBoxSizeZ.value = dockingConfig.boxSize.z;
+                    
+                    updateDockingBoxGeometry();
+                    
+                    // Update docked position
+                    dockedPosition.set(
+                        dockingConfig.dockedPosition.x,
+                        dockingConfig.dockedPosition.y,
+                        dockingConfig.dockedPosition.z
+                    );
+                    
+                    dockedRotation.set(
+                        dockingConfig.dockedRotation.x * Math.PI / 180,
+                        dockingConfig.dockedRotation.y * Math.PI / 180,
+                        dockingConfig.dockedRotation.z * Math.PI / 180
+                    );
+                    
+                    document.getElementById('docked-position-display').textContent = 
+                        `(${dockedPosition.x.toFixed(2)}, ${dockedPosition.y.toFixed(2)}, ${dockedPosition.z.toFixed(2)})`;
+                    
+                    document.getElementById('docked-rotation-display').textContent = 
+                        `${(dockedRotation.x * 180 / Math.PI).toFixed(1)}°, ${(dockedRotation.y * 180 / Math.PI).toFixed(1)}°, ${(dockedRotation.z * 180 / Math.PI).toFixed(1)}°`;
+                    
+                    alert('Docking configuration loaded successfully!');
+                } catch (error) {
+                    console.error('Error loading docking configuration:', error);
+                    alert('Error loading docking configuration: ' + error.message);
+                }
+            };
+            
+            reader.readAsText(file);
+        });
+        
+        // Custom collision boxes input
+        const collisionBoxesInput = document.getElementById('collision-boxes-input');
+        const applyCollisionBoxesBtn = document.getElementById('apply-collision-boxes');
+        const resetCollisionBoxesBtn = document.getElementById('reset-collision-boxes');
+        const exportCollisionBoxesBtn = document.getElementById('export-collision-boxes');
+        const loadCollisionBoxesInput = document.getElementById('load-collision-boxes');
+        const collisionBoxesDiv = document.getElementById('collision-boxes');
+        
+        // Set default value in the textarea
+        collisionBoxesInput.value = '[{"center": [0,0,0], "size": [2,2,2]}]';
+        
+        // Function to export collision boxes
+        function exportCollisionBoxes() {
+            const collisionData = stationCollisionBoxes.map(box => ({
+                center: [box.center.x, box.center.y, box.center.z],
+                size: [box.size.x, box.size.y, box.size.z]
+            }));
+            
+            const dataStr = JSON.stringify(collisionData, null, 2);
+            const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+            
+            const exportFileDefaultName = 'station_collision_boxes.json';
+            
+            const linkElement = document.createElement('a');
+            linkElement.setAttribute('href', dataUri);
+            linkElement.setAttribute('download', exportFileDefaultName);
+            linkElement.click();
+        }
+        
+        // Function to clean and validate JSON input
+        function cleanAndValidateJSON(jsonString) {
+            // Remove comments (both // and /* */)
+            let cleaned = jsonString.replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
+            
+            // Remove trailing commas
+            cleaned = cleaned.replace(/,(\s*[}\]])/g, '$1');
+            
+            // Trim whitespace
+            cleaned = cleaned.trim();
+            
+            // Check if it's empty
+            if (!cleaned) {
+                throw new Error('Input is empty');
+            }
+            
+            // Try to parse
+            try {
+                return JSON.parse(cleaned);
+            } catch (error) {
+                // Provide more detailed error information
+                const match = error.message.match(/position (\d+)/);
+                const position = match ? parseInt(match[1]) : 'unknown';
+                const lines = cleaned.substring(0, position).split('\n');
+                const line = lines.length;
+                const column = lines[lines.length - 1].length + 1;
+                
+                throw new Error(`JSON parsing error at line ${line}, column ${column}: ${error.message}`);
+            }
+        }
+        
+        // Function to load collision boxes from JSON data
+        function loadCollisionBoxesFromData(collisionData) {
+            try {
+                // Validate the data
+                if (!Array.isArray(collisionData)) {
+                    throw new Error('Input must be an array');
+                }
+                
+                // Create new collision boxes
+                const newCollisionBoxes = [];
+                
+                collisionData.forEach(boxData => {
+                    if (!boxData.center || !boxData.size) {
+                        throw new Error('Each box must have center and size properties');
+                    }
+                    
+                    // Ensure center and size are arrays of length 3
+                    if (!Array.isArray(boxData.center) || boxData.center.length !== 3 ||
+                        !Array.isArray(boxData.size) || boxData.size.length !== 3) {
+                        throw new Error('Center and size must be arrays of length 3');
+                    }
+                    
+                    newCollisionBoxes.push({
+                        center: new THREE.Vector3(...boxData.center),
+                        size: new THREE.Vector3(...boxData.size),
+                        box: new THREE.Box3(),
+                        helper: null
+                    });
+                });
+                
+                // Remove old helpers
+                stationCollisionBoxes.forEach(box => {
+                    if (box.helper) {
+                        scene.remove(box.helper);
+                    }
+                });
+                
+                // Update collision boxes
+                stationCollisionBoxes = newCollisionBoxes;
+                updateStationCollisionBoxes();
+                
+                // Update the textarea
+                collisionBoxesInput.value = JSON.stringify(collisionData, null, 2);
+                
+                return true;
+            } catch (error) {
+                console.error('Error loading collision boxes:', error);
+                alert('Error loading collision boxes: ' + error.message);
+                return false;
+            }
+        }
+        
+        // Function to load default collision boxes from a file
+        function loadDefaultCollisionBoxes() {
+            // Try to load from a default file path
+            fetch('station_collision_boxes.json')
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Default collision boxes file not found');
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    if (loadCollisionBoxesFromData(data)) {
+                        console.log('Default collision boxes loaded successfully');
+                    }
+                })
+                .catch((error) => {
+                    console.log('No default collision boxes file found, using defaults');
+                    // Load default collision boxes if no file is found
+                    loadCollisionBoxesFromData([{"center": [0,0,0], "size": [2,2,2]}]);
+                });
+        }
+        
+        // Event listeners
+        applyCollisionBoxesBtn.addEventListener('click', () => {
+            // Check if input is empty
+            if (!collisionBoxesInput.value.trim()) {
+                alert('Please enter collision box data or load from a file');
+                return;
+            }
+            
+            try {
+                const collisionBoxesData = cleanAndValidateJSON(collisionBoxesInput.value);
+                if (loadCollisionBoxesFromData(collisionBoxesData)) {
+                    alert('Collision boxes updated successfully!');
+                }
+            } catch (error) {
+                alert('Error parsing collision boxes: ' + error.message);
+            }
+        });
+        
+        resetCollisionBoxesBtn.addEventListener('click', () => {
+            // Reset to default collision box
+            const defaultBoxes = [{
+                center: new THREE.Vector3(0, 0, 0),
+                size: new THREE.Vector3(2, 2, 2),
+                box: new THREE.Box3(),
+                helper: null
+            }];
+            
+            // Remove old helpers
+            stationCollisionBoxes.forEach(box => {
+                if (box.helper) {
+                    scene.remove(box.helper);
+                }
+            });
+            
+            // Update collision boxes
+            stationCollisionBoxes = defaultBoxes;
+            updateStationCollisionBoxes();
+            
+            // Reset textarea
+            collisionBoxesInput.value = '[{"center": [0,0,0], "size": [2,2,2]}]';
+            
+            alert('Collision boxes reset to default!');
+        });
+        
+        exportCollisionBoxesBtn.addEventListener('click', exportCollisionBoxes);
+        
+        loadCollisionBoxesInput.addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            if (!file) return;
+            
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const collisionData = cleanAndValidateJSON(e.target.result);
+                    if (loadCollisionBoxesFromData(collisionData)) {
+                        alert('Collision boxes loaded successfully!');
+                    }
+                } catch (error) {
+                    alert('Error parsing collision boxes file: ' + error.message);
+                }
+            };
+            
+            reader.readAsText(file);
+        });
+
+        // Axes helpers
+        function createAxes(length = 5, origin = new THREE.Vector3()) {
+            const axes = new THREE.Group();
+            // X red
+            const xArrow = new THREE.ArrowHelper(new THREE.Vector3(1, 0, 0), origin, length, 0xff0000);
+            axes.add(xArrow);
+            // Y green
+            const yArrow = new THREE.ArrowHelper(new THREE.Vector3(0, 1, 0), origin, length, 0x00ff00);
+            axes.add(yArrow);
+            // Z blue
+            const zArrow = new THREE.ArrowHelper(new THREE.Vector3(0, 0, 1), origin, length, 0x0000ff);
+            axes.add(zArrow);
+            return axes;
+        }
+
+        const worldAxes = createAxes(10, new THREE.Vector3(0, 0, 0));
+        scene.add(worldAxes);
+
+        const bodyAxes = createAxes(1);
+        scene.add(bodyAxes);
+
+        // Derivatives function for RK4
+        function getDerivatives(s) {
+            const px = s[0], py = s[1], pz = s[2];
+            const vx = s[3], vy = s[4], vz = s[5];
+            const qw = s[6], qx = s[7], qy = s[8], qz = s[9];
+            const ox = s[10], oy = s[11], oz = s[12];
+
+            let quat = new THREE.Quaternion(qw, qx, qy, qz);
+            quat.normalize();
+
+            // Body force (assuming +Z body is forward)
+            let fb_x = 0, fb_y = 0, fb_z = 0;
+            if (keys['w']) fb_z += thrustForce;
+            if (keys['s']) fb_z -= thrustForce;
+            if (keys['a']) fb_x -= thrustForce;
+            if (keys['d']) fb_x += thrustForce;
+            if (keys['q']) fb_y += thrustForce;
+            if (keys['e']) fb_y -= thrustForce;
+
+            let fb = new THREE.Vector3(fb_x, fb_y, fb_z);
+            let fw = fb.clone().applyQuaternion(quat);
+            let ax = fw.x, ay = fw.y, az = fw.z;
+
+            // Body torque
+            let tb_x = 0, tb_y = 0, tb_z = 0;
+            if (keys['i']) tb_x += torqueMag;
+            if (keys['k']) tb_x -= torqueMag;
+            if (keys['l']) tb_y += torqueMag;
+            if (keys['j']) tb_y -= torqueMag;
+            if (keys['u']) tb_z += torqueMag;
+            if (keys['o']) tb_z -= torqueMag;
+
+            let oxdot = tb_x;
+            let oydot = tb_y;
+            let ozdot = tb_z;
+
+            // Quaternion derivative - expanded form to avoid multiplyScalar
+            let dq_w = 0.5 * (-qx * ox - qy * oy - qz * oz);
+            let dq_x = 0.5 * (qw * ox + qy * oz - qz * oy);
+            let dq_y = 0.5 * (qw * oy - qx * oz + qz * ox);
+            let dq_z = 0.5 * (qw * oz + qx * oy - qy * ox);
+
+            return [
+                vx, vy, vz,
+                ax, ay, az,
+                dq_w, dq_x, dq_y, dq_z,
+                oxdot, oydot, ozdot
+            ];
+        }
+
+        // RK4 integration step
+        function rk4Step(s, dt) {
+            let k1 = getDerivatives(s);
+            let s2 = s.map((val, i) => val + 0.5 * dt * k1[i]);
+            let k2 = getDerivatives(s2);
+            let s3 = s.map((val, i) => val + 0.5 * dt * k2[i]);
+            let k3 = getDerivatives(s3);
+            let s4 = s.map((val, i) => val + dt * k3[i]);
+            let k4 = getDerivatives(s4);
+
+            let newS = s.map((val, i) => val + (dt / 6) * (k1[i] + 2 * k2[i] + 2 * k3[i] + k4[i]));
+
+            // Normalize quaternion
+            let qw = newS[6], qx = newS[7], qy = newS[8], qz = newS[9];
+            let qnorm = Math.sqrt(qw * qw + qx * qx + qy * qy + qz * qz);
+            if (qnorm > 0) {
+                newS[6] = qw / qnorm;
+                newS[7] = qx / qnorm;
+                newS[8] = qy / qnorm;
+                newS[9] = qz / qnorm;
+            }
+
+            return newS;
+        }
+
+        // Reset
+        function reset() {
+            // Start at docked position if recorded, otherwise use default
+            if (dockedPosition.length() > 0) {
+                state[0] = dockedPosition.x;
+                state[1] = dockedPosition.y;
+                state[2] = dockedPosition.z;
+                
+                const dockedQuat = new THREE.Quaternion().setFromEuler(dockedRotation);
+                state[6] = dockedQuat.w;
+                state[7] = dockedQuat.x;
+                state[8] = dockedQuat.y;
+                state[9] = dockedQuat.z;
+            } else {
+                state = [-2.5, 0, 4.5, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0];
+            }
+            
+            paused = false;
+            cameraMode = 1;
+            controls.target.set(state[0], state[1], state[2]);
+            camera.position.copy(controls.target.clone().add(cameraOffset));
+            previousTarget.copy(controls.target);
+            controls.update();
+            
+            // Reset satellite to default box if a custom model was loaded
+            if (satelliteModelName !== "Default Box") {
+                scene.remove(satellite);
+                satBboxHelper.visible = false; // Hide helper temporarily
+                scene.remove(satBboxHelper);
+                
+                const satGeo = new THREE.BoxGeometry(0.5, 0.5, 1);
+                const satMat = new THREE.MeshStandardMaterial({ color: 0x00ff00 });
+                satellite = new THREE.Mesh(satGeo, satMat);
+                scene.add(satellite);
+                
+                // Create new bounding box helper for the default model
+                const newSatBboxHelper = new THREE.BoxHelper(satellite, 0xffff00);
+                newSatBboxHelper.visible = showBoundingBoxes;
+                scene.add(newSatBboxHelper);
+                satBboxHelper = newSatBboxHelper;
+                
+                satelliteModelName = "Default Box";
+            }
+            
+            // Reset docking state
+            isDocked = false;
+            canAutoDock = true;
+            if (dockingPortEnabled) {
+                dockingPort.visible = true;
+                dockingBox.visible = true;
+            }
+        }
+
+        // Update HUD
+        function updateHUD() {
+            const euler = new THREE.Euler().setFromQuaternion(quaternion, 'YXZ');
+            const pitch = (euler.x * 180 / Math.PI).toFixed(1);
+            const yaw = (euler.y * 180 / Math.PI).toFixed(1);
+            const roll = (euler.z * 180 / Math.PI).toFixed(1);
+
+            // Angular velocity in deg/s
+            const angVelX = (angularVelocity.x * 180 / Math.PI).toFixed(1);
+            const angVelY = (angularVelocity.y * 180 / Math.PI).toFixed(1);
+            const angVelZ = (angularVelocity.z * 180 / Math.PI).toFixed(1);
+
+            const modeNames = ['First-person', 'Orbit', 'Selfie Stick'];
+            const cameraModeName = modeNames[cameraMode];
+
+            let hudContent = `
+                Position:<br>
+                X: ${position.x.toFixed(2)}<br>
+                Y: ${position.y.toFixed(2)}<br>
+                Z: ${position.z.toFixed(2)}<br><br>
+                Velocity:<br>
+                X: ${velocity.x.toFixed(2)}<br>
+                Y: ${velocity.y.toFixed(2)}<br>
+                Z: ${velocity.z.toFixed(2)}<br><br>
+                Rotation Rate (deg/s):<br>
+                X: ${angVelX}<br>
+                Y: ${angVelY}<br>
+                Z: ${angVelZ}<br><br>
+                Attitude (deg):<br>
+                Pitch: ${pitch}<br>
+                Yaw: ${yaw}<br>
+                Roll: ${roll}<br><br>
+                Camera Mode: ${cameraModeName}<br>
+                Satellite Model: ${satelliteModelName}<br>
+                Bounding Boxes: ${showBoundingBoxes ? 'ON' : 'OFF'}<br>
+                Collision Boxes: ${stationCollisionBoxes.length}<br>
+                Docking Port: ${dockingPortEnabled ? 'ENABLED' : 'DISABLED'}<br>
+                Docked: ${isDocked ? 'YES' : 'NO'}<br>
+                Can Auto-Dock: ${canAutoDock ? 'YES' : 'NO'}
+            `;
+
+            if (paused) {
+                hudContent += `<br><strong>PAUSED</strong>`;
+            }
+
+            document.getElementById('hud').innerHTML = hudContent;
+            
+            // Update docked message
+            const dockedMessage = document.getElementById('docked-message');
+            if (isDocked) {
+                dockedMessage.style.display = 'block';
+            } else {
+                dockedMessage.style.display = 'none';
+            }
+        }
+
+        // Animate loop
+        function animate() {
+            requestAnimationFrame(animate);
+
+            // Handle special keys (edge detection)
+            if (keys['p'] && keys['`'] &&!lastKeys.p) paused = !paused;
+            if (keys['r'] && keys['`'] && !lastKeys.r) reset();
+            if (keys['c'] && !lastKeys.c) {
+                const oldMode = cameraMode;
+                cameraMode = (cameraMode + 1) % 3;
+                controls.enabled = (cameraMode === 1);
+                if (cameraMode === 1) {
+                    controls.target.copy(position);
+                    previousTarget.copy(position);
+                    let initOffset;
+                    if (oldMode !== 0) {
+                        initOffset = camera.position.clone().sub(position);
+                    } else {
+                        initOffset = cameraOffset.clone();
+                    }
+                    camera.position.copy(position).add(initOffset);
+                    controls.update();
+                } else if (cameraMode === 2) {
+                    controls.enabled = false;
+                    controls.target.copy(position);
+                    previousTarget.copy(position);
+                    let initOffset;
+                    if (oldMode !== 0) {
+                        initOffset = camera.position.clone().sub(position);
+                    } else {
+                        initOffset = cameraOffset.clone();
+                    }
+                    const invQuat = quaternion.clone().invert();
+                    const localInit = initOffset.clone().applyQuaternion(invQuat);
+                    setSphericalFromVector(localInit);
+                    // Manually set camera for immediate effect
+                    const spherical = controls._spherical;
+                    const radius = spherical.radius;
+                    const phi = spherical.phi;
+                    const theta = spherical.theta;
+                    const sinPhi = Math.sin(phi);
+                    const cosPhi = Math.cos(phi);
+                    const sinTheta = Math.sin(theta);
+                    const cosTheta = Math.cos(theta);
+                    const localOffset = new THREE.Vector3(radius * sinPhi * cosTheta, radius * cosPhi, radius * sinPhi * sinTheta);
+                    const worldOffset = localOffset.clone().applyQuaternion(quaternion);
+                    const idealPos = position.clone().add(worldOffset);
+                    const worldUp = new THREE.Vector3(0, -1, 0).applyQuaternion(quaternion).normalize(); // Fixed: Changed Y from 1 to -1
+                    const idealMat = new THREE.Matrix4().lookAt(idealPos, position, worldUp);
+                    const idealQuat = new THREE.Quaternion().setFromRotationMatrix(idealMat);
+                    camera.position.copy(idealPos);
+                    camera.quaternion.copy(idealQuat);
+                }
+            }
+            
+            // Handle B key to toggle bounding boxes and show/hide collision editor
+            if (keys['b'] && !lastKeys.b) {
+                showBoundingBoxes = !showBoundingBoxes;
+                satBboxHelper.visible = showBoundingBoxes;
+                
+                // Toggle visibility for all collision box helpers
+                stationCollisionBoxes.forEach(box => {
+                    if (box.helper) {
+                        box.helper.visible = showBoundingBoxes;
+                    }
+                });
+                
+                // Toggle visibility for docking port helper
+                if (dockingPortHelper) {
+                    dockingPortHelper.visible = showBoundingBoxes;
+                }
+                
+                // Show/hide the collision boxes editor
+                if (showBoundingBoxes) {
+                    collisionBoxesDiv.classList.add('visible');
+                } else {
+                    collisionBoxesDiv.classList.remove('visible');
+                }
+            }
+            
+            // Handle 1 key to toggle docking editor
+            if (keys['1'] && !lastKeys['1']) {
+                const dockingEditor = document.getElementById('docking-editor');
+                dockingEditor.classList.toggle('visible');
+            }
+            
+            // Handle G key to undock
+            if (keys['g'] && !lastKeys['g'] && isDocked) {
+                undock();
+            }
+            
+            // Handle space key for emergency stop
+            if (keys[' '] && !lastKeys[' ']) {
+                emergencyStop();
+            }
+            
+            lastKeys.p = keys['p'];
+            lastKeys.r = keys['r'];
+            lastKeys.c = keys['c'];
+            lastKeys.b = keys['b'];
+            lastKeys['1'] = keys['1'];
+            lastKeys['g'] = keys['g'];
+            lastKeys[' '] = keys[' '];
+
+            if (!paused && !isDocked) {
+                const dt = clock.getDelta();
+                state = rk4Step(state, dt);
+
+                // Update state vectors
+                position.set(state[0], state[1], state[2]);
+                velocity.set(state[3], state[4], state[5]);
+                quaternion.set(state[6], state[7], state[8], state[9]);
+                angularVelocity.set(state[10], state[11], state[12]);
+
+                // Update satellite
+                satellite.position.copy(position);
+                satellite.quaternion.copy(quaternion);
+
+                // Update bounding box helper for satellite
+                satBboxHelper.update();
+
+                // Update body axes
+                bodyAxes.position.copy(position);
+                bodyAxes.quaternion.copy(quaternion);
+
+                // Check for docking if enabled
+                if (dockingPortEnabled && canAutoDock) {
+                    checkDocking();
+                }
+
+                // Simple world-space collision detection
+                const satBbox = new THREE.Box3().setFromObject(satellite);
+
+                // Check collision with each collision box
+                let collisionDetected = false;
+                let minOverlap = Infinity;
+                let collisionNormal = new THREE.Vector3();
+
+                for (const collisionBox of stationCollisionBoxes) {
+                    // Check for intersection between two world-space AABBs
+                    if (satBbox.intersectsBox(collisionBox.worldBox)) {
+                        
+                        // Compute penetration depths in WORLD space
+                        const satMin = satBbox.min;
+                        const satMax = satBbox.max;
+                        const staMin = collisionBox.worldBox.min;
+                        const staMax = collisionBox.worldBox.max;
+
+                        const overlapX = Math.min(satMax.x - staMin.x, staMax.x - satMin.x);
+                        const overlapY = Math.min(satMax.y - staMin.y, staMax.y - satMin.y);
+                        const overlapZ = Math.min(satMax.z - staMin.z, staMax.z - satMin.z);
+
+                        const localMinOverlap = Math.min(overlapX, overlapY, overlapZ);
+                        
+                        if (localMinOverlap < minOverlap) {
+                            minOverlap = localMinOverlap;
+                            
+                            const satCenter = satBbox.getCenter(new THREE.Vector3());
+                            const staCenter = collisionBox.worldBox.getCenter(new THREE.Vector3());
+                            const deltaCenter = new THREE.Vector3().subVectors(satCenter, staCenter);
+
+                            // Determine the normal in WORLD space
+                            if (minOverlap === overlapX) {
+                                const signX = Math.sign(deltaCenter.x) || (satMin.x < staMin.x ? -1 : 1);
+                                collisionNormal.set(signX, 0, 0);
+                            } else if (minOverlap === overlapY) {
+                                const signY = Math.sign(deltaCenter.y) || (satMin.y < staMin.y ? -1 : 1);
+                                collisionNormal.set(0, signY, 0);
+                            } else {
+                                const signZ = Math.sign(deltaCenter.z) || (satMin.z < staMin.z ? -1 : 1);
+                                collisionNormal.set(0, 0, signZ);
+                            }
+                        }
+                        
+                        collisionDetected = true;
+                    }
+                }
+
+                // If any collision was detected, resolve it using the smallest overlap
+                if (collisionDetected) {
+                    // Reflect velocity along the world-space normal (only if approaching)
+                    const dot = velocity.dot(collisionNormal);
+                    if (dot < 0) {
+                        velocity.add(collisionNormal.clone().multiplyScalar(-2 * dot));
+                        velocity.multiplyScalar(0.8); // Damping
+                    }
+
+                    // Resolve position penetration to prevent sinking
+                    const resolutionDistance = minOverlap * 0.5 + 0.001; // Small epsilon to avoid jitter
+                    position.add(collisionNormal.clone().multiplyScalar(resolutionDistance));
+
+                    // Update state with resolved values
+                    state[0] = position.x;
+                    state[1] = position.y;
+                    state[2] = position.z;
+                    state[3] = velocity.x;
+                    state[4] = velocity.y;
+                    state[5] = velocity.z;
+                }
+            }
+
+            // Update camera
+            if (cameraMode === 0) {
+                // First-person (mounted on satellite, looking forward +Z body)
+                camera.position.copy(position);
+                let camQuat = quaternion.clone();
+                camQuat.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI));
+                camQuat.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI));
+                camera.quaternion.copy(camQuat);
+            } else if (cameraMode === 1) {
+                // Orbit camera around satellite: translate camera by target delta to preserve relative position
+                const delta = new THREE.Vector3().subVectors(position, previousTarget);
+                camera.position.add(delta);
+                controls.target.copy(position);
+                previousTarget.copy(position);
+                controls.update();
+            } else if (cameraMode === 2) {
+                // Selfie stick: orbit relative to satellite's local frame with damping inertia
+                const spherical = controls._spherical;
+                const radius = spherical.radius;
+                const phi = spherical.phi;
+                const theta = spherical.theta;
+                const sinPhi = Math.sin(phi);
+                const cosPhi = Math.cos(phi);
+                const sinTheta = Math.sin(theta);
+                const cosTheta = Math.cos(theta);
+                const localOffset = new THREE.Vector3(radius * sinPhi * cosTheta, radius * cosPhi, radius * sinPhi * sinTheta);
+                const worldOffset = localOffset.clone().applyQuaternion(quaternion);
+                const idealPos = position.clone().add(worldOffset);
+                const worldUp = new THREE.Vector3(0, -1, 0).applyQuaternion(quaternion).normalize(); // Fixed: Changed Y from 1 to -1
+                const idealMat = new THREE.Matrix4().lookAt(idealPos, position, worldUp);
+                const idealQuat = new THREE.Quaternion().setFromRotationMatrix(idealMat);
+                if (controls.enableDamping) {
+                    camera.position.lerp(idealPos, controls.dampingFactor);
+                    camera.quaternion.slerp(idealQuat, controls.dampingFactor);
+                } else {
+                    camera.position.copy(idealPos);
+                    camera.quaternion.copy(idealQuat);
+                }
+            }
+
+            updateHUD();
+            renderer.render(scene, camera);
+        }
+        
+        // Check for docking
+        function checkDocking() {
+            if (!dockingPortEnabled || !dockingPort) return;
+            
+            // Get satellite bounding box
+            const satBbox = new THREE.Box3().setFromObject(satellite);
+            
+            // Get docking box bounding box
+            const dockingBbox = new THREE.Box3().setFromObject(dockingBox);
+            
+            // Check if satellite is fully inside docking box
+            const isFullyInside = satBbox.containsBox(dockingBbox);
+            
+            if (isFullyInside) {
+                dock();
+            }
+        }
+        
+        // Dock the spacecraft
+        function dock() {
+            if (isDocked) return;
+            
+            isDocked = true;
+            paused = true;
+            canAutoDock = false;
+            
+            // Position spacecraft at docked position
+            if (dockedPosition.length() > 0) {
+                position.copy(dockedPosition);
+                quaternion.setFromEuler(dockedRotation);
+                
+                // Update state
+                state[0] = position.x;
+                state[1] = position.y;
+                state[2] = position.z;
+                state[6] = quaternion.w;
+                state[7] = quaternion.x;
+                state[8] = quaternion.y;
+                state[9] = quaternion.z;
+            }
+            
+            // Update satellite
+            satellite.position.copy(position);
+            satellite.quaternion.copy(quaternion);
+            
+            // Update camera if in orbit mode
+            if (cameraMode === 1) {
+                controls.target.copy(position);
+                previousTarget.copy(position);
+                camera.position.copy(position).add(cameraOffset);
+                controls.update();
+            }
+            
+            console.log("Docked successfully!");
+        }
+        
+        // Undock the spacecraft
+        function undock() {
+            if (!isDocked) return;
+            
+            isDocked = false;
+            paused = false;
+            
+            // Add a small velocity to push the spacecraft away from the docking port
+            const dockingQuat = new THREE.Quaternion().setFromEuler(dockingPortRotation);
+            const pushDirection = shipOffset.clone().normalize().applyQuaternion(dockingQuat);
+            velocity.copy(pushDirection.multiplyScalar(0.5));
+            
+            // Update state
+            state[3] = velocity.x;
+            state[4] = velocity.y;
+            state[5] = velocity.z;
+            
+            console.log("Undocked successfully!");
+        }
+        
+        // Emergency stop
+        function emergencyStop() {
+            velocity.set(0, 0, 0);
+            angularVelocity.set(0, 0, 0);
+            
+            // Update state
+            state[3] = 0;
+            state[4] = 0;
+            state[5] = 0;
+            state[10] = 0;
+            state[11] = 0;
+            state[12] = 0;
+            
+            console.log("Emergency stop activated!");
+        }
+
+        // Resize handler
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // Start
+        animate();
+    </script>
+</body>
+</html>\
