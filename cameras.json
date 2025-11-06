@@ -1,0 +1,16 @@
+{
+    "cameras": [
+        {
+            "name": "Forward View",
+            "position": { "x": 0, "y": 0, "z": 0 },
+            "rotation": { "x": 0, "y": 3.14159, "z": 0 },
+            "fov": 75
+        },
+        {
+            "name": "+X Axis View",
+            "position": { "x": 0, "y": 0, "z": 0 },
+            "rotation": { "x": 0, "y": -1.5708, "z": 0 },
+            "fov": 25
+        }
+    ]
+}

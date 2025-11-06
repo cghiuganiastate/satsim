@@ -1,0 +1,25 @@
+{
+  "wheels": [
+    {
+      "name": "RW-X",
+      "orientation": { "x": 1, "y": 0, "z": 0 },
+      "position": { "x": 0, "y": 0, "z": 0 },
+      "maxAngularMomentum": 15,
+      "maxTorque": 0.5
+    },
+    {
+      "name": "RW-Y",
+      "orientation": { "x": 0, "y": 1, "z": 0 },
+      "position": { "x": 0, "y": 0, "z": 0 },
+      "maxAngularMomentum": 15,
+      "maxTorque": 0.5
+    },
+    {
+      "name": "RW-Z",
+      "orientation": { "x": 0, "y": 0, "z": 1 },
+      "position": { "x": 0, "y": 0, "z": 0 },
+      "maxAngularMomentum": 15,
+      "maxTorque": 0.5
+    }
+  ]
+}

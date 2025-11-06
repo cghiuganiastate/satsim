@@ -1,0 +1,28 @@
+{
+  "thrusters": [
+    { "position": [-0.3, 0.3, 0.5], "direction": [0, 0, -1], "thrust": 0.8,"isp":15.4 },
+    { "position": [0.3, -0.3, 0.5], "direction": [0, 0, -1], "thrust": 0.8,"isp":15.4 },
+    { "position": [0.3, 0.3, 0.5], "direction": [0, 0, -1], "thrust": 0.8,"isp":15.4 },
+    { "position": [-0.3, -0.3, 0.5], "direction": [0, 0, -1], "thrust": 0.8,"isp":15.4 },
+    { "position": [-0.3, -0.3, -0.5], "direction": [0, 0, 1], "thrust": 0.8,"isp":15.4 },
+    { "position": [0.3, 0.3, -0.5], "direction": [0, 0, 1], "thrust": 0.8,"isp":15.4 },
+    { "position": [0.3, -0.3, -0.5], "direction": [0, 0, 1], "thrust": 0.8,"isp":15.4 },
+    { "position": [-0.3, 0.3, -0.5], "direction": [0, 0, 1], "thrust": 0.8,"isp":15.4 },
+    { "position": [0.5, -0.3, -0.3], "direction": [-1, 0, 0], "thrust": 0.6,"isp":15.4 },
+    { "position": [0.5, 0.3, 0.3], "direction": [-1, 0, 0], "thrust": 0.6,"isp":15.4 },
+    { "position": [0.5, 0.3, -0.3], "direction": [-1, 0, 0], "thrust": 0.6,"isp":15.4 },
+    { "position": [0.5, -0.3, 0.3], "direction": [-1, 0, 0], "thrust": 0.6,"isp":15.4 },
+    { "position": [-0.5, -0.3, 0.3], "direction": [1, 0, 0], "thrust": 0.6,"isp":15.4 },
+    { "position": [-0.5, 0.3, -0.3], "direction": [1, 0, 0], "thrust": 0.6,"isp":15.4 },
+    { "position": [-0.5, 0.3, 0.3], "direction": [1, 0, 0], "thrust": 0.6,"isp":15.4 },
+    { "position": [-0.5, -0.3, -0.3], "direction": [1, 0, 0], "thrust": 0.6,"isp":15.4 },
+    { "position": [-0.3, 0.5, 0.3], "direction": [0, -1, 0], "thrust": 0.6,"isp":15.4 },
+    { "position": [0.3, 0.5, -0.3], "direction": [0, -1, 0], "thrust": 0.6,"isp":15.4 },
+    { "position": [0.3, 0.5, 0.3], "direction": [0, -1, 0], "thrust": 0.6,"isp":15.4 },
+    { "position": [-0.3, 0.5, -0.3], "direction": [0, -1, 0], "thrust": 0.6,"isp":15.4 },
+    { "position": [-0.3, -0.5, -0.3], "direction": [0, 1, 0], "thrust": 0.6,"isp":15.4 },
+    { "position": [0.3, -0.5, 0.3], "direction": [0, 1, 0], "thrust": 0.6,"isp":15.4 },
+    { "position": [0.3, -0.5, -0.3], "direction": [0, 1, 0], "thrust": 0.6,"isp":15.4 },
+    { "position": [-0.3, -0.5, 0.3], "direction": [0, 1, 0], "thrust": 0.6,"isp":15.4 }
+  ]
+}

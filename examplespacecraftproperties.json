@@ -1,0 +1,10 @@
+{
+  "mass": 15000,
+  "inertia": {
+    "x": 5000,
+    "y": 6000,
+    "z": 4000
+  },
+  "name": "Custom Spacecraft",
+  "description": "A custom spacecraft with specific properties"
+}
