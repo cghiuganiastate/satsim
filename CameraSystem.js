@@ -1,3 +1,4 @@
+//CameraSystem.js
 // Import necessary Three.js modules
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -7,7 +8,7 @@ export class CameraSystem {
     constructor(renderer, targetObject) {
         // Initialize camera
         this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-        this.defaultFov = 75; // Store the original FOV
+        this.defaultFov = 75; // Store original FOV
         
         // Camera modes: 0: orbit, 1: selfie stick, 2+: first-person cameras
         this.cameraMode = 0;
@@ -49,8 +50,22 @@ export class CameraSystem {
         // Setup window resize handler
         window.addEventListener('resize', this.handleResize.bind(this));
         
-        // Load camera configurations
-        this.loadCameraConfigurations();
+        // Load camera configurations - now using the new method
+        this.initializeCameras();
+    }
+    
+    // New method to initialize cameras (checks for uploaded files first)
+    async initializeCameras() {
+        // Check if there's an uploaded camera configuration
+        if (window.uploadedFiles && window.uploadedFiles.config && window.uploadedFiles.config.cameras) {
+            console.log('Using uploaded camera configuration');
+            // Pass the cameras array directly
+            this.loadCamerasWithConfig(window.uploadedFiles.config.cameras);
+        } else {
+            // Fall back to loading from file
+            console.log('Loading camera configuration from file');
+            await this.loadCameraConfigurations();
+        }
     }
     
     loadCameraConfigurations() {
@@ -65,21 +80,62 @@ export class CameraSystem {
                 return response.json();
             })
             .then(data => {
-                this.firstPersonCameras = data.cameras || [];
+                // Check if data is an array (direct cameras) or an object with cameras property
+                if (Array.isArray(data)) {
+                    this.processCameraConfig(data);
+                } else if (data && data.cameras) {
+                    this.processCameraConfig(data.cameras);
+                } else {
+                    console.warn('Invalid camera configuration format, using default');
+                    this.processCameraConfig([{
+                        name: "Default",
+                        position: { x: 0, y: 0, z: 0 },
+                        rotation: { x: 0, "y": Math.PI, "z": 0 },
+                        "fov": 75
+                    }]);
+                }
                 console.log(`Loaded ${this.firstPersonCameras.length} camera configurations`);
             })
             .catch(error => {
                 console.error('Error loading camera configurations:', error);
                 // Fallback to default camera if loading fails
-                this.firstPersonCameras = [
-                    {
-                        name: "Default",
-                        position: { x: 0, y: 0, z: 0 },
-                        rotation: { x: 0, "y": Math.PI, "z": 0 },
-                        "fov": 75
-                    }
-                ];
+                this.processCameraConfig([{
+                    name: "Default",
+                    position: { x: 0, y: 0, z: 0 },
+                    rotation: { x: 0, "y": Math.PI, "z": 0 },
+                    "fov": 75
+                }]);
             });
+    }
+    
+    // New function to load cameras from a configuration object
+    loadCamerasWithConfig(cameraConfig) {
+        // Check if cameraConfig is an array (direct cameras) or an object with cameras property
+        if (Array.isArray(cameraConfig)) {
+            this.processCameraConfig(cameraConfig);
+        } else if (cameraConfig && cameraConfig.cameras) {
+            this.processCameraConfig(cameraConfig.cameras);
+        } else {
+            console.warn('Invalid camera configuration format, using default');
+            this.processCameraConfig([{
+                name: "Default",
+                position: { x: 0, y: 0, z: 0 },
+                rotation: { x: 0, "y": Math.PI, "z": 0 },
+                "fov": 75
+            }]);
+        }
+        console.log(`Loaded ${this.firstPersonCameras.length} camera configurations from config`);
+    }
+    
+    // Common function to process camera configuration
+    processCameraConfig(data) {
+        // Ensure data is an array
+        if (Array.isArray(data)) {
+            this.firstPersonCameras = data;
+        } else {
+            console.warn('Camera configuration data is not an array');
+            this.firstPersonCameras = [];
+        }
     }
     
     setupEventListeners(renderer) {
@@ -144,7 +200,7 @@ export class CameraSystem {
         // Cycle through all modes
         this.cameraMode = (this.cameraMode + 1) % totalModes;
 
-        // If we looped back to orbit mode, reset the FOV
+        // If we looped back to orbit mode, reset FOV
         if (oldMode === totalModes - 1 && this.cameraMode === 0) {
             this.camera.fov = this.defaultFov;
             this.camera.updateProjectionMatrix();

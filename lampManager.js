@@ -43,7 +43,17 @@ export class LampManager {
       const response = await fetch(jsonPath);
       if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
       const lampsConfig = await response.json();
+      
+      return this.loadLampsWithConfig(lampsConfig);
+    } catch (error) {
+      console.error('Failed to load lamps:', error);
+      throw error;
+    }
+  }
 
+  // New function to load lamps from a configuration object
+  async loadLampsWithConfig(lampsConfig) {
+    try {
       if (!lampsConfig || !lampsConfig.lamps || !Array.isArray(lampsConfig.lamps)) {
         throw new Error('Invalid lamps configuration format');
       }
@@ -54,7 +64,7 @@ export class LampManager {
       console.log(`Successfully loaded ${lampsConfig.lamps.length} lamps`);
       return this.lights;
     } catch (error) {
-      console.error('Failed to load lamps:', error);
+      console.error('Failed to load lamps from config:', error);
       throw error;
     }
   }
@@ -77,7 +87,7 @@ export class LampManager {
       light.shadow.camera.far = config.distance || 20;
     }
 
-    // Add light and its target directly to the scene, NOT to the spacecraft
+    // Add light and its target directly to scene, NOT to spacecraft
     this.scene.add(light);
     this.scene.add(light.target);
 
@@ -100,12 +110,12 @@ export class LampManager {
     return this.lampsVisible;
   }
 
-  // This is the critical new method
+  // This is critical new method
   updateLamps() {
-    // Ensure the spacecraft's world matrix is up-to-date
+    // Ensure spacecraft's world matrix is up-to-date
     this.spacecraftMesh.updateMatrixWorld(true);
 
-    // Copy the spacecraft's world matrix once, as it's the same for all lamps
+    // Copy spacecraft's world matrix once, as it's same for all lamps
     this._tempMatrix.copy(this.spacecraftMesh.matrixWorld);
 
     this.lamps.forEach((config, index) => {
@@ -113,21 +123,21 @@ export class LampManager {
       const helper = this.lampHelpers[index];
 
       // --- 1. Calculate Light's World Position ---
-      // Start with the lamp's local position from the config
+      // Start with lamp's local position from config
       this._tempPos.set(config.position.x, config.position.y, config.position.z);
-      // Apply the spacecraft's world transform to get the final world position
+      // Apply spacecraft's world transform to get final world position
       this._tempPos.applyMatrix4(this._tempMatrix);
-      // Set the light's position in world space
+      // Set light's position in world space
       light.position.copy(this._tempPos);
 
       // --- 2. Calculate Light's World Direction ---
-      // Create a matrix for the lamp's local rotation
+      // Create a matrix for lamp's local rotation
       this._lampLocalMatrix.compose(
-        new THREE.Vector3(), // No local position for the direction calculation
+        new THREE.Vector3(), // No local position for direction calculation
         new THREE.Quaternion().setFromEuler(new THREE.Euler(config.rotation.x, config.rotation.y, config.rotation.z, 'XYZ')),
         new THREE.Vector3(1, 1, 1) // No scale
       );
-      // Combine the spacecraft's transform with the lamp's local rotation
+      // Combine spacecraft's transform with lamp's local rotation
       this._combinedMatrix.multiplyMatrices(this._tempMatrix, this._lampLocalMatrix);
 
       // A spotlight's default direction is its local -Z axis
@@ -140,7 +150,7 @@ export class LampManager {
       // Position the target at the light's position, plus the direction vector scaled by distance
       light.target.position.copy(light.position).add(this._tempDir.multiplyScalar(targetDistance));
 
-      // --- 4. Update the Helper ---
+      // --- 4. Update Helper ---
       helper.update();
     });
   }

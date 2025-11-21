@@ -1,4 +1,10 @@
-// Model loading controls
+import * as THREE from 'three';
+import * as CANNON from 'cannon-es';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { STLLoader } from 'three/addons/loaders/STLLoader.js';
+import { loadSpacecraft } from './spacecraftManager.js';
+import { CameraSystem } from './CameraSystem.js'; // <-- FIX: Added the missing import
+
 const loadModelButton = document.getElementById('load-model');
 const loadPropertiesButton = document.getElementById('load-properties');
 const modelFileInput = document.getElementById('model-file');
@@ -10,8 +16,10 @@ const centroidCheckbox = document.getElementById('centroid-model');
 
 // Store spacecraft properties
 let spacecraftProperties = {
-  mass: 10000,
-  inertia: null // Will use default if not provided
+  dryMass: 5,
+  fuelMass: 5,
+  maxFuelMass: 5,
+  inertia: null
 };
 
 // Add snapping behavior to sliders
@@ -40,10 +48,21 @@ propertiesFileInput.addEventListener('change', (event) => {
   reader.onload = (e) => {
     try {
       const properties = JSON.parse(e.target.result);
-      spacecraftProperties.mass = properties.mass || 10000;
+      
+      // Update local properties object for future model loads
+      spacecraftProperties.dryMass = properties.dryMass || 5;
+      spacecraftProperties.fuelMass = properties.fuelMass || 5;
+      spacecraftProperties.maxFuelMass = properties.maxFuelMass || 5;
       spacecraftProperties.inertia = properties.inertia || null;
+      
       document.getElementById('hull-status').textContent = 'Properties loaded successfully';
       console.log('Properties loaded:', spacecraftProperties);
+      
+      // Apply properties to the spacecraft
+      import('./spacecraftManager.js').then(({ setFuelProperties }) => {
+        setFuelProperties(properties);
+      });
+      
     } catch (error) {
       console.error('Error parsing properties file:', error);
       document.getElementById('hull-status').textContent = 'Error loading properties file';
@@ -77,14 +96,16 @@ modelFileInput.addEventListener('change', (event) => {
     window.camSys = new CameraSystem(window.renderer, window.satMesh);
     
     // Reinitialize thrusters
-    initializeThrusters(
-      THRUSTER_CONFIG,
-      CANNON,
-      window.satMesh,
-      window.keyToThrusterIndices,
-      window.createThrusterVisual
-    ).then(newThrusters => {
-      window.thrusters = newThrusters;
+    import('./thrusterSetup.js').then(initializeThrusters => {
+      initializeThrusters.default(
+        'thrusters.json',
+        CANNON,
+        window.satMesh,
+        window.keyToThrusterIndices,
+        window.createThrusterVisual
+      ).then(newThrusters => {
+        window.thrusters = newThrusters;
+      });
     });
   });
 });

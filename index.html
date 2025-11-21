@@ -5,97 +5,262 @@
   <title>6DOF Satellite Simulator</title>
   <style>
     body { margin: 0; overflow: hidden; font-family: monospace; }
-    #hud { position: absolute; left: 10px; top: 10px; background: rgba(0,0,0,0.7); color: #0f0; padding: 10px; border-radius: 5px; font-size: 12px; width: 260px; }
+    
+    /* File Upload Menu Styles */
+    #file-upload-menu {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0, 0, 0, 0.9);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 1000;
+    }
+    
+    .menu-container {
+      background-color: #111;
+      border: 1px solid #333;
+      border-radius: 10px;
+      padding: 20px;
+      width: 80%;
+      max-width: 800px;
+      max-height: 80vh;
+      overflow-y: auto;
+      color: #eee;
+    }
+    
+    .menu-header {
+      text-align: center;
+      margin-bottom: 20px;
+      color: #0f0;
+    }
+    
+    .file-upload-section {
+      margin-bottom: 25px;
+    }
+    
+    .section-title {
+      font-size: 16px;
+      font-weight: bold;
+      color: #0f0;
+      margin-bottom: 15px;
+      padding-bottom: 5px;
+      border-bottom: 1px solid #333;
+    }
+    
+    .file-upload-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 15px;
+    }
+    
+    .file-upload-item {
+      background-color: #222;
+      border: 1px solid #444;
+      border-radius: 5px;
+      padding: 10px;
+    }
+    
+    .file-upload-item label {
+      display: block;
+      margin-bottom: 5px;
+      color: #0f0;
+    }
+    
+    .file-upload-item input[type="file"] {
+      width: 100%;
+      padding: 5px;
+      background-color: #333;
+      border: 1px solid #555;
+      color: #eee;
+      border-radius: 3px;
+    }
+    
+    .file-status {
+      font-size: 12px;
+      margin-top: 5px;
+      color: #0ff;
+    }
+    
+    .menu-buttons {
+      display: flex;
+      justify-content: center;
+      gap: 20px;
+      margin-top: 20px;
+    }
+    
+    .menu-button {
+      padding: 10px 20px;
+      background-color: #333;
+      border: 1px solid #555;
+      color: #eee;
+      border-radius: 5px;
+      cursor: pointer;
+      transition: background-color 0.3s;
+    }
+    
+    .menu-button:hover {
+      background-color: #444;
+    }
+    
+    .start-button {
+      background-color: #060;
+      border-color: #090;
+    }
+    
+    .start-button:hover {
+      background-color: #080;
+    }
+    
+    /* Simulation UI Styles */
+    #status-panel { position: absolute; left: 10px; top: 10px; background: rgba(0,0,0,0.7); color: #0f0; padding: 10px; border-radius: 5px; font-size: 12px; width: 260px; }
     #controls { position: absolute; bottom: 10px; left: 10px; background: rgba(0,0,0,0.7); color: #fff; padding: 10px; border-radius: 5px; font-size: 12px; }
     #hull-info { position: absolute; right: 10px; top: 10px; background: rgba(0,0,0,0.7); color: #0f0; padding: 10px; border-radius: 5px; font-size: 12px; width: 200px; }
-    #model-controls { position: absolute; bottom: 10px; right: 10px; background: rgba(0,0,0,0.7); color: #fff; padding: 10px; border-radius: 5px; font-size: 12px; }
-    #fuel-gauge { position: absolute; left: 10px; top: 220px; background: rgba(0,0,0,0.7); color: #0f0; padding: 10px; border-radius: 5px; font-size: 12px; width: 260px; }
-    #attitude-control { position: absolute; left: 10px; top: 320px; background: rgba(0,0,0,0.7); color: #0f0; padding: 10px; border-radius: 5px; font-size: 12px; width: 260px; }
-    #lamp-status { position: absolute; left: 10px; top: 420px; background: rgba(0,0,0,0.7); color: #ff0; padding: 10px; border-radius: 5px; font-size: 12px; width: 260px; }
     #distance-info { position: absolute; left: 10px; top: 520px; background: rgba(0,0,0,0.7); color: #0ff; padding: 10px; border-radius: 5px; font-size: 12px; width: 260px; display: none; }
     .fuel-bar-container { width: 100%; height: 20px; background-color: #333; border-radius: 5px; margin-top: 5px; }
     .fuel-bar { height: 100%; background-color: #0f0; border-radius: 5px; transition: width 0.3s; }
-    .momentum-bar-container { width: 100%; height: 10px; background-color: #333; border-radius: 5px; margin-top: 2px; }
-    .momentum-bar { height: 100%; background-color: #00f; border-radius: 5px; transition: width 0.3s; }
+    .status-section { margin-bottom: 10px; }
+    .status-section:last-child { margin-bottom: 0; }
     canvas { display: block; }
   </style>
 </head>
 <body>
-<div id="hud"></div>
-<div id="fuel-gauge">
-  <div>Fuel: <span id="fuel-percent">100</span>%</div>
-  <div class="fuel-bar-container">
-    <div id="fuel-bar" class="fuel-bar" style="width: 100%"></div>
+  <!-- File Upload Menu -->
+  <div id="file-upload-menu">
+    <div class="menu-container">
+      <h2 class="menu-header">6DOF Satellite Simulator - Configuration</h2>
+      <p style="text-align: center; margin-bottom: 20px;">
+        Upload custom configuration files or use defaults to start the simulation
+      </p>
+      
+      <div class="file-upload-section">
+        <div class="section-title">Spacecraft Model</div>
+        <div class="file-upload-grid">
+          <div class="file-upload-item">
+            <label for="spacecraft-model-file">Spacecraft Model (.stl)</label>
+            <input type="file" id="spacecraft-model-file" accept=".stl">
+            <div class="file-status" id="spacecraft-model-status">No file selected</div>
+          </div>
+        </div>
+      </div>
+      
+      <div class="file-upload-section">
+        <div class="section-title">Docking Port</div>
+        <div class="file-upload-grid">
+          <div class="file-upload-item">
+            <label for="docking-port-file">Docking Port Model (.stl)</label>
+            <input type="file" id="docking-port-file" accept=".stl">
+            <div class="file-status" id="docking-port-status">No file selected</div>
+          </div>
+        </div>
+      </div>
+      
+      <div class="file-upload-section">
+        <div class="section-title">Configuration File</div>
+        <div class="file-upload-grid">
+          <div class="file-upload-item">
+            <label for="config-file">Complete Configuration (.json)</label>
+            <input type="file" id="config-file" accept=".json">
+            <div class="file-status" id="config-status">No file selected</div>
+          </div>
+        </div>
+      </div>
+      
+      <div class="menu-buttons">
+        <button id="use-defaults-button" class="menu-button">Use Defaults</button>
+        <button id="start-simulation-button" class="menu-button start-button">Start Simulation</button>
+      </div>
+    </div>
   </div>
-  <div style="margin-top: 5px; font-size: 10px;">
-    <span>Dry Mass: <span id="dry-mass">0</span> kg</span> | 
-    <span>Fuel Mass: <span id="fuel-mass">0</span> kg</span> | 
-    <span>Total Mass: <span id="total-mass">0</span> kg</span>
+
+  <!-- Simulation UI (Initially Hidden) -->
+  <div id="simulation-container" style="display: none;">
+    <div id="status-panel">
+      <div class="status-section">
+        <div>Position: <span id="position-info">X: 0.00 Y: 0.00 Z: 0.00</span></div>
+        <div>Velocity: <span id="velocity-info">X: 0.00 Y: 0.00 Z: 0.00</span></div>
+        <div>Angular Velocity: <span id="angular-velocity-info">X: 0.00 Y: 0.00 Z: 0.00</span></div>
+        <div>Attitude (RPY): <span id="attitude-info">Roll: 0.0° Pitch: 0.0° Yaw: 0.0°</span></div>
+        <div>Status: <span id="status-info">RUNNING</span></div>
+        <div>Camera Mode: <span id="camera-mode-info">Unknown</span></div>
+        <div>Fine Control: <span id="fine-control-info">OFF</span></div>
+      </div>
+      
+      <div class="status-section">
+        <div>Fuel: <span id="fuel-percent">100</span>%</div>
+        <div class="fuel-bar-container">
+          <div id="fuel-bar" class="fuel-bar" style="width: 100%"></div>
+        </div>
+        <div style="margin-top: 5px; font-size: 10px;">
+          <span>Dry Mass: <span id="dry-mass">0</span> kg</span> | 
+          <span>Fuel Mass: <span id="fuel-mass">0</span> kg</span> | 
+          <span>Total Mass: <span id="total-mass">0</span> kg</span>
+        </div>
+      </div>
+      
+      <div class="status-section">
+        <div>Attitude Control: <span id="control-mode">Thrusters</span></div>
+        <div id="reaction-wheel-status" style="display: none; margin-top: 5px;">
+          <div style="font-size: 10px;">Reaction Wheels:</div>
+          <div id="rw-list"></div>
+        </div>
+        <div id="cmg-status" style="display: none; margin-top: 5px;">
+          <div style="font-size: 10px;">CMGs:</div>
+          <div id="cmg-list"></div>
+        </div>
+        <div id="desaturation-status" style="display: none; margin-top: 5px; color: #ff0;">
+          Desaturation Active
+        </div>
+      </div>
+      
+      <div class="status-section">
+        <div>Lights: <span id="lamp-status-text">OFF</span></div>
+        <div style="margin-top: 5px; font-size: 10px;">
+          <span>Lamps: <span id="lamp-count">0</span></span>
+        </div>
+      </div>
+      
+      <div class="status-section">
+        <div>Docking Status: <span id="docking-status">NOT DOCKED</span></div>
+        <div>Distance to Dock: <span id="dock-distance">--</span> m</div>
+        <div>Angular Difference: <span id="angular-diff">--</span>°</div>
+        <div>Speed: <span id="docking-speed">--</span> m/s</div>
+        <div>Angular Speed: <span id="docking-angular-speed">--</span>°/s</div>
+      </div>
+    </div>
+    <div id="distance-info">
+      <div>Distance to Nearest Wall:</div>
+      <div style="margin-top: 5px;">X+: <span id="dist-x-pos">--</span> | X-: <span id="dist-x-neg">--</span></div>
+      <div>Y+: <span id="dist-y-pos">--</span> | Y-: <span id="dist-y-neg">--</span></div>
+      <div>Z+: <span id="dist-z-pos">--</span> | Z-: <span id="dist-z-neg">--</span></div>
+    </div>
+    <div id="controls">
+      <strong>Translation:</strong> W/S: +Z/-Z | A/D: +X/-X | E/Q: +Y/-Y<br>
+      <strong>Rotation:</strong> K/I: +Pitch/-Pitch | J/L: +Yaw/-Yaw | O/U: +Roll/-Roll<br>
+      <strong>Attitude Control:</strong> T: Toggle Control Mode(RCS/RW/CMG)<br>
+      <strong>Lights and Camera:</strong> V: Toggle Lights | C: Switch Camera<br>
+      <strong>State:</strong> `+R: Reset | `+P: Pause/Unpause | Space: Stop Movement and Rotation<br>
+      <strong>Fine Control:</strong> Caps Lock: Single-frame thruster pulses
+    </div>
+    <div id="hull-info">
+      <div id="hull-status">Loading Navion...</div>
+      <div id="hull-count">Hull Count: 0</div>
+    </div>
   </div>
-</div>
-<div id="attitude-control">
-  <div>Attitude Control: <span id="control-mode">Thrusters</span></div>
-  <div id="reaction-wheel-status" style="display: none; margin-top: 5px;">
-    <div style="font-size: 10px;">Reaction Wheels:</div>
-    <div id="rw-list"></div>
-  </div>
-  <div id="cmg-status" style="display: none; margin-top: 5px;">
-    <div style="font-size: 10px;">CMGs:</div>
-    <div id="cmg-list"></div>
-  </div>
-  <div id="desaturation-status" style="display: none; margin-top: 5px; color: #ff0;">
-    Desaturation Active
-  </div>
-</div>
-<div id="lamp-status">
-  <div>Lights: <span id="lamp-status-text">OFF</span></div>
-  <div style="margin-top: 5px; font-size: 10px;">
-    <span>Lamps: <span id="lamp-count">0</span></span> | 
-    <span>V: Toggle Lights | `+V: Show Helpers</span>
-  </div>
-</div>
-<div id="distance-info">
-  <div>Distance to Nearest Wall:</div>
-  <div style="margin-top: 5px;">X+: <span id="dist-x-pos">--</span> | X-: <span id="dist-x-neg">--</span></div>
-  <div>Y+: <span id="dist-y-pos">--</span> | Y-: <span id="dist-y-neg">--</span></div>
-  <div>Z+: <span id="dist-z-pos">--</span> | Z-: <span id="dist-z-neg">--</span></div>
-</div>
-<div id="controls">
-  <strong>Translation:</strong> W/S: +Z/-Z | A/D: +X/-X | E/Q: +Y/-Y<br>
-  <strong>Rotation:</strong> K/I: +Pitch/-Pitch | J/L: +Yaw/-Yaw | O/U: +Roll/-Roll<br>
-  <strong>Attitude Control:</strong> T: Toggle Control Mode(RCS/RW/CMG)<br>
-  <strong>Lights:</strong> V: Toggle Lights | `+V: Show Light Helpers<br>
-  <strong>Other:</strong> `+R: Reset | `+P: Pause | Space: Stop Movement and Rotation<br>
-  <strong>Hulls:</strong> `+H: Toggle Collision Hull Visibility | C to switch camera modes
-</div>
-<div id="hull-info">
-  <div id="hull-status">No hulls loaded</div>
-  <div id="hull-count">Hull Count: 0</div>
-</div>
-<div id="model-controls">
-  <strong>Model Controls:</strong><br>
-  <label for="rot-x">X-Axis: <span id="rot-x-value">0°</span></label>
-  <input type="range" id="rot-x" min="-270" max="270" value="0" step="1"><br>
-  <label for="rot-y">Y-Axis: <span id="rot-y-value">0°</span></label>
-  <input type="range" id="rot-y" min="-270" max="270" value="0" step="1"><br>
-  <label for="rot-z">Z-Axis: <span id="rot-z-value">0°</span></label>
-  <input type="range" id="rot-z" min="-270" max="270" value="0" step="1"><br>
-  <input type="checkbox" id="centroid-model" checked> <label for="centroid-model">Centroid Model</label><br>
-  <button id="load-model">Load Model</button>
-  <button id="load-properties">Load Properties</button>
-  <input type="file" id="model-file" accept=".glb,.gltf,.stl" style="display:none;">
-  <input type="file" id="properties-file" accept=".json" style="display:none;">
-</div>
-<script>
+
+  <script>
         if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/satsim/sw.js', { scope: '/satsim/' }) //deployed
         //navigator.serviceWorker.register('./sw.js', { scope: './' }) //testing
+        navigator.serviceWorker.register('/satsim/sw.js', { scope: '/satsim/' }) //deployed
           .then(reg => console.log('SW registered:', reg.scope))
           .catch(err => console.error('SW registration failed:', err));
       });
     }
-</script>
+  </script>
   <script type="importmap">
   {
     "imports": {
@@ -105,699 +270,153 @@
     }
   }
   </script>
-<script type="module">
-  import * as THREE from 'three';
-  import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-  import * as CANNON from 'cannon-es';
-  import { CameraSystem } from './CameraSystem.js';
-  import initializeThrusters from './thrusterSetup.js';
-  import { updateHUD } from './hudUpdater.js';
-  import { loadConvexHulls, toggleHullVisibility } from './hullManager.js';
-  import { 
-    loadSpacecraft, 
-    toggleSpacecraftBoundingBoxVisibility, 
-    getSpacecraftBody, 
-    getSpacecraftMesh, 
-    updateSpacecraft 
-  } from './spacecraftManager.js';
-  import { spacecraftProperties } from './modelControls.js';
-  import { AttitudeControlSystem } from './attitudeControl.js';
-  import { LampManager } from './lampManager.js';
-
-  const THRUSTER_CONFIG = 'thrusters.json';
-  //const MODEL_PATH = 'gatewaycore.glb'; //testing
-  const MODEL_PATH = 'https://raw.githubusercontent.com/nasa/NASA-3D-Resources/11ebb4ee043715aefbba6aeec8a61746fad67fa7/3D%20Models/Gateway/Gateway%20Core.glb'; //deployed
-  const CONVEX_HULLS_PATH = 'convex-hulls.json'; // Path to convex hulls file
-  const LAMPS_CONFIG = 'lamps.json'; // Path to lamps configuration
-  
-  const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x000011);
-  const skyboxLoader = new THREE.CubeTextureLoader();
-  const skybox = skyboxLoader.load([
-    'right.png',   // +X
-    'left.png',    // -X
-    'top.png',     // +Y
-    'bottom.png',  // -Y
-    'front.png',   // +Z
-    'back.png'     // -Z
-  ]);
-  scene.background = skybox;   // this replaces the solid colour background
-
-  const renderer = new THREE.WebGLRenderer({ antialias: true });
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  document.body.appendChild(renderer.domElement);
-
-  const world = new CANNON.World();
-  world.gravity.set(0, 0, 0);
-  world.broadphase = new CANNON.NaiveBroadphase();
-  world.solver.iterations = 10;
-
-  let satBody;
-  let satMesh;
-  let camSys;
-  let attitudeControl;
-  let lampManager;
-  let station;
-  
-  // Fuel system variables
-  let dryMass = 5; // kg - mass of spacecraft without fuel
-  let fuelMass = 5; // kg - initial fuel mass
-  let maxFuelMass = 5; // kg - maximum fuel capacity
-  
-  // Distance checking variables
-  let showDistanceInfo = false;
-  let raycaster = new THREE.Raycaster();
-  let maxDistance = 100;
-
-  // Make these variables globally accessible
-  window.scene = scene;
-  window.world = world;
-  window.renderer = renderer;
-  window.satBody = satBody;
-  window.satMesh = satMesh;
-  window.camSys = camSys;
-  window.dryMass = dryMass;
-  window.fuelMass = fuelMass;
-  window.maxFuelMass = maxFuelMass;
-
-  // Initialize with default spacecraft
-  function initializeDefaultSpacecraft() {
-    const satSize = new THREE.Vector3(1, 1, 1);
-    const totalMass = dryMass + fuelMass;
-
-    satBody = new CANNON.Body({
-      mass: totalMass,
-      shape: new CANNON.Box(new CANNON.Vec3(satSize.x/2, satSize.y/2, satSize.z/2)),
-        angularDamping: 0,
-        linearDamping: 0,
-        allowSleep: false
-    });
-    // Set default position to (0, -3, 5.5)
-    satBody.position.set(0, -3, 5.5);
+  <script type="module">
+    // File Upload Menu JavaScript
+    const fileUploadMenu = document.getElementById('file-upload-menu');
+    const simulationContainer = document.getElementById('simulation-container');
+    const useDefaultsButton = document.getElementById('use-defaults-button');
+    const startSimulationButton = document.getElementById('start-simulation-button');
     
-    // Set default orientation to -90 pitch (rotation around X-axis)
-    const pitchQuaternion = new CANNON.Quaternion();
-    pitchQuaternion.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), -Math.PI/2);
-    satBody.quaternion.copy(pitchQuaternion);
+    // Store uploaded files
+    const uploadedFiles = {
+      config: null,
+      spacecraftModel: null,
+      dockingPort: null
+    };
     
-    world.addBody(satBody);
-
-    const satGeo = new THREE.BoxGeometry(satSize.x, satSize.y, satSize.z);
-    const satMat = new THREE.MeshStandardMaterial({ color: 0x888888 });
-    satMesh = new THREE.Mesh(satGeo, satMat);
-    scene.add(satMesh);
-
-    const satAxes = new THREE.AxesHelper(2);
-    satMesh.add(satAxes);
-
-    camSys = new CameraSystem(renderer, satMesh);
+    // File input elements
+    const fileInputs = {
+      config: document.getElementById('config-file'),
+      spacecraftModel: document.getElementById('spacecraft-model-file'),
+      dockingPort: document.getElementById('docking-port-file')
+    };
     
-    // Initialize attitude control system
-    attitudeControl = new AttitudeControlSystem(satBody, scene);
-    attitudeControl.setSatelliteMesh(satMesh); // Set the satellite mesh reference
-}
-
-  // Initialize with default spacecraft
-  initializeDefaultSpacecraft();
-
-  const loader = new GLTFLoader();
-  loader.load(MODEL_PATH, gltf => {
-    station = gltf.scene;
-    station.scale.set(1,1,1);
-    //since the original station model is misaligned from the global coordinates, we rotate it to be correct.
-    //now, the station is rotated correctly with the thrusters aligned in the +Z direction
-    let rot1 = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI/180*-25);
-    station.quaternion.multiply(rot1);
-    let rot2 = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI/180*-10);
-    station.quaternion.multiply(rot2);  
-    station.position.set(0, 0, 0);
+    // Status elements
+    const statusElements = {
+      config: document.getElementById('config-status'),
+      spacecraftModel: document.getElementById('spacecraft-model-status'),
+      dockingPort: document.getElementById('docking-port-status')
+    };
     
-    scene.add(station);
-  }, undefined, err => console.error('GLTF load error:', err));
-
-  scene.add(new THREE.AmbientLight(0x404040));
-  const dirLight = new THREE.DirectionalLight(0xffffff, 1);
-  //dirLight.position.set(5,10,7);
-  dirLight.position.set(-10,-2,-1);
-  scene.add(dirLight);
-
-  scene.add(new THREE.AxesHelper(5));
-
-  let thrusters = [];
-  const keyToThrusterIndices = { w:[],s:[],a:[],d:[],q:[],e:[],i:[],k:[],j:[],l:[],u:[],o:[] };
-
-  // Make these globally accessible
-  window.thrusters = thrusters;
-  window.keyToThrusterIndices = keyToThrusterIndices;
-
-  function createThrusterVisual(pos, dir){
-    const group = new THREE.Group();
-    const cone = new THREE.ConeGeometry(0.15,0.4,8);
-    const mat = new THREE.MeshStandardMaterial({
-      color:0xff5500, emissive:0x000000, metalness:0.1, roughness:0.8
-    });
-    const mesh = new THREE.Mesh(cone, mat);
-    mesh.position.copy(pos);
-    const q = new THREE.Quaternion();
-    q.setFromUnitVectors(new THREE.Vector3(0,1,0), new THREE.Vector3(dir.x,dir.y,dir.z));
-    mesh.quaternion.copy(q);
-    mesh.rotateX(Math.PI);
-    group.add(mesh);
-    return {group, material:mat};
-  }
-
-  // Make this globally accessible
-  window.createThrusterVisual = createThrusterVisual;
-
-  const keys = {};               
-  let backtickPressed = false;
-
-  document.addEventListener('keydown', e => {
-    const k = e.key.toLowerCase();
-    if (k === '`') backtickPressed = true;
-    keys[k] = true;
-
-    if (backtickPressed && k === 'r') resetSimulation();
-    if (backtickPressed && k === 'p') paused = !paused;
-    if (backtickPressed && k === 'h') {
-      toggleHullVisibility();
-      // Also toggle spacecraft bounding box visibility
-      const hullStatus = document.getElementById('hull-status').textContent;
-      const showHulls = hullStatus === 'Hulls Visible';
-      toggleSpacecraftBoundingBoxVisibility(showHulls);
-    }
-    
-    // Toggle distance info display
-    if (backtickPressed && k === 'x') {
-      showDistanceInfo = !showDistanceInfo;
-      document.getElementById('distance-info').style.display = showDistanceInfo ? 'block' : 'none';
-    }
-
-    if (k === 'c') camSys.switchCameraMode();
-    if (k === ' ') stopEverything();   // Space = instant stop
-    
-    // Toggle attitude control mode
-    if (k === 't' && attitudeControl && attitudeControl.loaded) {
-      const newMode = attitudeControl.toggleMode();
-      document.getElementById('control-mode').textContent = 
-        newMode === 'thrusters' ? 'Thrusters' : 
-        newMode === 'reactionwheels' ? 'Reaction Wheels' : 'CMGs';
-      
-      // Update UI visibility
-      document.getElementById('reaction-wheel-status').style.display = 
-        newMode === 'reactionwheels' ? 'block' : 'none';
-      document.getElementById('cmg-status').style.display = 
-        newMode === 'cmgs' ? 'block' : 'none';
-    }
-    
-    // Toggle lamps
-    if (k === 'v' && lampManager) {
-      if (backtickPressed) {
-        // Toggle helpers when backtick + v is pressed
-        const helpersVisible = lampManager.toggleHelpers();
-        console.log('Helpers toggled:', helpersVisible);
+    // Add event listeners to file inputs
+    fileInputs.config.addEventListener('change', (event) => {
+      const file = event.target.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          try {
+            const content = JSON.parse(e.target.result);
+            // Validate the combined config structure
+            if (validateCombinedConfig(content)) {
+              uploadedFiles.config = content;
+              statusElements.config.textContent = `Loaded: ${file.name}`;
+              statusElements.config.style.color = '#0f0';
+            } else {
+              statusElements.config.textContent = `Invalid configuration format`;
+              statusElements.config.style.color = '#f00';
+            }
+          } catch (error) {
+            statusElements.config.textContent = `Error parsing ${file.name}: ${error.message}`;
+            statusElements.config.style.color = '#f00';
+            console.error(`Error parsing ${file.name}:`, error);
+          }
+        };
+        reader.readAsText(file);
       } else {
-        // Toggle lamps when only v is pressed
-        const lampsVisible = lampManager.toggleLamps();
-        document.getElementById('lamp-status-text').textContent = lampsVisible ? 'ON' : 'OFF';
-      }
-    }
-    
-    // Desaturate reaction wheels or reset CMGs
-    if (k === 'g' && attitudeControl && attitudeControl.loaded) {
-      attitudeControl.desaturateWithThrusters(thrusters, keyToThrusterIndices);
-    }
-  });
-
-  document.addEventListener('keyup', e => {
-    const k = e.key.toLowerCase();
-    if (k === '`') backtickPressed = false;
-    delete keys[k];
-  });
-
-  function stopEverything() {
-    satBody.velocity.set(0,0,0);
-    satBody.angularVelocity.set(0,0,0);
-    // turn off all thrusters visually
-    thrusters.forEach(t => {
-      if (t.active) {
-        t.active = false;
-        t.material.emissive.setHex(0x000000);
+        uploadedFiles.config = null;
+        statusElements.config.textContent = 'No file selected';
+        statusElements.config.style.color = '#0ff';
       }
     });
-  }
-  let paused = false;
-  const hud = document.getElementById('hud');
-  function resetSimulation(){
-    // Reset position to (0, -3, 5.5)
-    satBody.position.set(0, -3, 5.5);
-    satBody.velocity.set(0,0,0);
-    satBody.angularVelocity.set(0,0,0);
     
-    // Reset orientation to -90 pitch
-    const pitchQuaternion = new CANNON.Quaternion();
-    pitchQuaternion.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), -Math.PI/2);
-    satBody.quaternion.copy(pitchQuaternion);
-    satMesh.quaternion.copy(pitchQuaternion);
-    
-    // Reset fuel
-    fuelMass = maxFuelMass;
-    updateSatelliteMass();
-    
-    // Reset attitude control system
-    if (attitudeControl) {
-      attitudeControl.mode = 'thrusters';
-      document.getElementById('control-mode').textContent = 'Thrusters';
-      document.getElementById('reaction-wheel-status').style.display = 'none';
-      document.getElementById('cmg-status').style.display = 'none';
-      
-      // Reset reaction wheels
-      attitudeControl.reactionWheels.forEach(wheel => {
-        wheel.currentAngularMomentum = 0;
-      });
-      
-      // Reset CMGs
-      attitudeControl.cmgs.forEach(cmg => {
-        cmg.gimbalAngle = 0;
-      });
-    }
-    
-    // Reset lamps
-    if (lampManager) {
-      lampManager.toggleLamps(); // This will turn them on
-      document.getElementById('lamp-status-text').textContent = 'ON';
-      // Reset helpers to hidden
-      lampManager.helpersVisible = false;
-      lampManager.lampHelpers.forEach(helper => {
-        helper.visible = false;
-      });
-    }
-    
-    camSys.reset();
-    // make sure thrusters are off
-    thrusters.forEach(t => {
-      t.active = false;
-      t.material.emissive.setHex(0x000000);
-    });
-  }
-
-  // Function to update satellite mass based on fuel
-  function updateSatelliteMass() {
-    const totalMass = dryMass + fuelMass;
-    satBody.mass = totalMass;
-    satBody.updateMassProperties();
-  }
-
-  // Function to update fuel gauge
-  function updateFuelGauge() {
-    const fuelPercent = Math.max(0, (fuelMass / maxFuelMass) * 100);
-    document.getElementById('fuel-percent').textContent = fuelPercent.toFixed(1);
-    document.getElementById('fuel-bar').style.width = fuelPercent + '%';
-    document.getElementById('dry-mass').textContent = dryMass.toFixed(1);
-    document.getElementById('fuel-mass').textContent = fuelMass.toFixed(1);
-    document.getElementById('total-mass').textContent = (dryMass + fuelMass).toFixed(1);
-    
-    // Change fuel bar color based on fuel level
-    const fuelBar = document.getElementById('fuel-bar');
-    if (fuelPercent > 50) {
-      fuelBar.style.backgroundColor = '#0f0'; // Green
-    } else if (fuelPercent > 25) {
-      fuelBar.style.backgroundColor = '#ff0'; // Yellow
-    } else {
-      fuelBar.style.backgroundColor = '#f00'; // Red
-    }
-  }
-
-  // Function to update attitude control status
-  function updateAttitudeControlStatus() {
-    if (!attitudeControl || !attitudeControl.loaded) return;
-    
-    const status = attitudeControl.getStatus();
-    
-    // Update desaturation status
-    document.getElementById('desaturation-status').style.display = 
-      status.desaturationActive ? 'block' : 'none';
-    
-    // Update reaction wheel status
-    if (status.mode === 'reactionwheels' && status.reactionWheels) {
-      const rwList = document.getElementById('rw-list');
-      rwList.innerHTML = '';
-      
-      status.reactionWheels.forEach(wheel => {
-        const wheelDiv = document.createElement('div');
-        wheelDiv.style.fontSize = '9px';
-        wheelDiv.style.marginTop = '2px';
-        
-        const color = Math.abs(wheel.percentage) > 80 ? '#f00' : 
-                     Math.abs(wheel.percentage) > 50 ? '#ff0' : '#0f0';
-        
-        wheelDiv.innerHTML = `
-          <div>${wheel.name}: ${wheel.percentage}%</div>
-          <div class="momentum-bar-container">
-            <div class="momentum-bar" style="width: ${Math.abs(wheel.percentage)}%; background-color: ${color}"></div>
-          </div>
-        `;
-        
-        rwList.appendChild(wheelDiv);
-      });
-    }
-    
-    // Update CMG status
-    if (status.mode === 'cmgs' && status.cmgs) {
-      const cmgList = document.getElementById('cmg-list');
-      cmgList.innerHTML = '';
-      
-      status.cmgs.forEach(cmg => {
-        const cmgDiv = document.createElement('div');
-        cmgDiv.style.fontSize = '9px';
-        cmgDiv.style.marginTop = '2px';
-        
-        const color = cmg.nearSingularity ? '#f00' : '#0f0';
-        
-        cmgDiv.innerHTML = `
-          <div style="color: ${color}">${cmg.name}: ${cmg.gimbalAngle}°</div>
-          <div style="font-size: 8px;">
-            ${cmg.nearSingularity ? 'Near Singularity!' : 'Normal'}
-          </div>
-        `;
-        
-        cmgList.appendChild(cmgDiv);
-      });
-    }
-  }
-
-  // Function to update lamp status
-  function updateLampStatus() {
-    if (lampManager && lampManager.lights.length > 0) {
-      document.getElementById('lamp-count').textContent = lampManager.lights.length;
-    } else {
-      document.getElementById('lamp-count').textContent = '0';
-    }
-  }
-
-  // Function to calculate distance to nearest collision point along axes
-  function calculateDistancesToWalls() {
-    if (!station || !satMesh) return;
-    
-    // Get satellite position in world space
-    const satPosition = new THREE.Vector3();
-    satMesh.getWorldPosition(satPosition);
-    
-    // Get satellite rotation in world space
-    const satRotation = new THREE.Quaternion();
-    satMesh.getWorldQuaternion(satRotation);
-    
-    // Create an array to store all intersectable objects
-    const intersectableObjects = [];
-    
-    // Add station and its children to intersectable objects
-    if (station) {
-      station.traverse((child) => {
-        if (child.isMesh) {
-          intersectableObjects.push(child);
-        }
-      });
-    }
-    
-    // Check distances along each axis (positive and negative)
-    const axes = [
-      { name: 'x-pos', direction: new THREE.Vector3(1, 0, 0) },
-      { name: 'x-neg', direction: new THREE.Vector3(-1, 0, 0) },
-      { name: 'y-pos', direction: new THREE.Vector3(0, 1, 0) },
-      { name: 'y-neg', direction: new THREE.Vector3(0, -1, 0) },
-      { name: 'z-pos', direction: new THREE.Vector3(0, 0, 1) },
-      { name: 'z-neg', direction: new THREE.Vector3(0, 0, -1) }
-    ];
-    
-    axes.forEach(axis => {
-      // Transform direction to world space
-      const worldDirection = axis.direction.clone().applyQuaternion(satRotation);
-      
-      // Set up raycaster
-      raycaster.set(satPosition, worldDirection);
-      raycaster.far = maxDistance;
-      
-      // Check for intersections
-      const intersects = raycaster.intersectObjects(intersectableObjects, true);
-      
-      if (intersects.length > 0) {
-        // Get the closest intersection
-        const closestIntersection = intersects[0];
-        const distance = closestIntersection.distance;
-        
-        // Update the UI
-        document.getElementById(`dist-${axis.name}`).textContent = 
-          distance < maxDistance ? distance.toFixed(2) + ' units' : '--';
+    fileInputs.spacecraftModel.addEventListener('change', (event) => {
+      const file = event.target.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          uploadedFiles.spacecraftModel = e.target.result;
+          statusElements.spacecraftModel.textContent = `Loaded: ${file.name}`;
+          statusElements.spacecraftModel.style.color = '#0f0';
+        };
+        reader.readAsArrayBuffer(file);
       } else {
-        // No intersection within max distance
-        document.getElementById(`dist-${axis.name}`).textContent = '--';
-      }
-    });
-  }
-
-async function main() {
-    try {
-        thrusters = await initializeThrusters(
-          THRUSTER_CONFIG,
-          CANNON,
-          satMesh,
-          keyToThrusterIndices,
-          createThrusterVisual
-        );
-        
-        // Load convex hulls
-        loadConvexHulls(CONVEX_HULLS_PATH, scene, world);
-        
-        // Initialize lamp manager
-        lampManager = new LampManager(scene, satMesh);
-        const lamps = await lampManager.loadLamps(LAMPS_CONFIG);
-        
-        // Initialize attitude control system
-        await attitudeControl.initialize();
-        
-        // Set the satellite mesh reference if a custom spacecraft is loaded
-        if (getSpacecraftMesh()) {
-            attitudeControl.setSatelliteMesh(getSpacecraftMesh());
-        } else {
-            // Use the default satellite mesh
-            attitudeControl.setSatelliteMesh(satMesh);
-        }
-        
-        // Update UI based on what was loaded
-        if (attitudeControl.loaded) {
-          console.log('Attitude control system loaded');
-        } else {
-          console.log('No attitude control systems loaded, using thrusters only');
-          document.getElementById('attitude-control').style.display = 'none';
-        }
-        
-        // Update lamp status
-        updateLampStatus();
-        
-        console.log('Simulation initialized successfully');
-    } catch (error) {
-        console.error('Error during initialization:', error);
-        // Show error in UI
-        const errorDiv = document.createElement('div');
-        errorDiv.style.position = 'absolute';
-        errorDiv.style.top = '50%';
-        errorDiv.style.left = '50%';
-        errorDiv.style.transform = 'translate(-50%, -50%)';
-        errorDiv.style.color = '#f00';
-        errorDiv.style.background = 'rgba(0,0,0,0.8)';
-        errorDiv.style.padding = '20px';
-        errorDiv.style.borderRadius = '5px';
-        errorDiv.style.fontSize = '16px';
-        errorDiv.textContent = `Error: ${error.message}`;
-        document.body.appendChild(errorDiv);
-    }
-    
-    animate();
-}
-
-const clock = new THREE.Clock();
-// In the main HTML file, update the animate function
-function animate(){
-  requestAnimationFrame(animate);
-  const dt = clock.getDelta();
-  if (!paused){
-    // Handle rotation control based on current mode
-    if (attitudeControl && attitudeControl.loaded && attitudeControl.mode !== 'thrusters') {
-      // Calculate desired torque from keyboard input
-      const torque = new CANNON.Vec3(0, 0, 0);
-      
-      // Note: We're inverting the signs to match the thruster behavior
-      if (keys['i']) torque.x += 0.5;  // Pitch down (positive X torque)
-      if (keys['k']) torque.x -= 0.5;  // Pitch up (negative X torque)
-      if (keys['l']) torque.y += 0.5;  // Yaw left (positive Y torque)
-      if (keys['j']) torque.y -= 0.5;  // Yaw right (negative Y torque)
-      if (keys['u']) torque.z += 0.5;  // Roll right (positive Z torque)
-      if (keys['o']) torque.z -= 0.5;  // Roll left (negative Z torque)
-      
-      // Apply control torque
-      if (torque.length() > 0) {
-        //console.log('Keyboard input torque:', { x: torque.x, y: torque.y, z: torque.z });
-        attitudeControl.applyControlTorque(torque);
-      }
-      
-      // Handle desaturation if active
-      if (attitudeControl.desaturationActive) {
-        attitudeControl.desaturateWithThrusters(thrusters, keyToThrusterIndices);
-      }
-    } else {
-      // Use thrusters for rotation
-      Object.entries(keyToThrusterIndices).forEach(([key, indices]) => {
-        if (keys[key] && indices.length) {
-          indices.forEach(i => {
-            const t = thrusters[i];
-            if (!t) return;
-
-            // Check if we have fuel
-            if (fuelMass <= 0) {
-              // No fuel, thrusters can't fire
-              if (t.active) {
-                t.active = false;
-                t.material.emissive.setHex(0x000000);
-              }
-              return;
-            }
-
-            // --- FAILSAFE CHECK ---
-            // This is a final check to prevent NaN errors if data is corrupted somehow.
-            if (!t.thrust || !t.isp || t.isp <= 0 || isNaN(t.thrust) || isNaN(t.isp)) {
-              console.error("Thruster has invalid properties, skipping.", t);
-              if (t.active) {
-                t.active = false;
-                t.material.emissive.setHex(0x000000);
-              }
-              return; // Skip this thruster for this frame
-            }
-            // --- END FAILSAFE ---
-
-            // Do not touch this
-            const forceLocal = t.dir.scale(t.thrust);
-            satBody.applyLocalForce(forceLocal, t.pos);
-
-            // Calculate fuel consumption based on thrust and ISP
-            // Formula: fuel consumption rate = thrust / (ISP * g0)
-            // where g0 = 9.81 m/s^2 (standard gravity)
-            const fuelConsumptionRate = t.thrust / (t.isp * 9.81);
-            const fuelConsumed = fuelConsumptionRate * dt;
-            
-            // Update fuel mass
-            fuelMass = Math.max(0, fuelMass - fuelConsumed);
-            updateSatelliteMass();
-
-            if (!t.active) {
-              t.active = true;
-              t.material.emissive.setHex(0xffaa00);
-            }
-          });
-        }
-      });
-    }
-    
-    // Handle translation (always uses thrusters)
-    Object.entries(keyToThrusterIndices).forEach(([key, indices]) => {
-      if (keys[key] && indices.length && ['w','s','a','d','q','e'].includes(key)) {
-        indices.forEach(i => {
-          const t = thrusters[i];
-          if (!t) return;
-
-          // Check if we have fuel
-          if (fuelMass <= 0) {
-            // No fuel, thrusters can't fire
-            if (t.active) {
-              t.active = false;
-              t.material.emissive.setHex(0x000000);
-            }
-            return;
-          }
-
-          // --- FAILSAFE CHECK ---
-          // This is a final check to prevent NaN errors if data is corrupted somehow.
-          if (!t.thrust || !t.isp || t.isp <= 0 || isNaN(t.thrust) || isNaN(t.isp)) {
-            console.error("Thruster has invalid properties, skipping.", t);
-            if (t.active) {
-              t.active = false;
-              t.material.emissive.setHex(0x000000);
-            }
-            return; // Skip this thruster for this frame
-          }
-          // --- END FAILSAFE ---
-
-          // Do not touch this
-          const forceLocal = t.dir.scale(t.thrust);
-          satBody.applyLocalForce(forceLocal, t.pos);
-
-          // Calculate fuel consumption based on thrust and ISP
-          // Formula: fuel consumption rate = thrust / (ISP * g0)
-          // where g0 = 9.81 m/s^2 (standard gravity)
-          const fuelConsumptionRate = t.thrust / (t.isp * 9.81);
-          const fuelConsumed = fuelConsumptionRate * dt;
-          
-          // Update fuel mass
-          fuelMass = Math.max(0, fuelMass - fuelConsumed);
-          updateSatelliteMass();
-
-          if (!t.active) {
-            t.active = true;
-            t.material.emissive.setHex(0xffaa00);
-          }
-        });
+        uploadedFiles.spacecraftModel = null;
+        statusElements.spacecraftModel.textContent = 'No file selected';
+        statusElements.spacecraftModel.style.color = '#0ff';
       }
     });
     
-    world.step(1/60);
-  }
-
-// Update spacecraft (either default or loaded model)
-  if (getSpacecraftBody()) {
-    updateSpacecraft();
-  } else {
-    // Sync visuals for default spacecraft
-    satMesh.position.copy(satBody.position);
-    satMesh.quaternion.copy(satBody.quaternion);
-  }
-
-  camSys.update();
-
-  // Update lamps
-  if (lampManager) {
-    lampManager.updateLamps();
-  }
-
-  // Deactivate unpressed thrusters
-  thrusters.forEach(t => {
-    const stillPressed = Object.entries(keyToThrusterIndices)
-      .some(([k,ids])=> keys[k] && ids.includes(t.index));
-    if (t.active && !stillPressed){
-      t.active = false;
-      t.material.emissive.setHex(0x000000);
+    fileInputs.dockingPort.addEventListener('change', (event) => {
+      const file = event.target.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          uploadedFiles.dockingPort = e.target.result;
+          statusElements.dockingPort.textContent = `Loaded: ${file.name}`;
+          statusElements.dockingPort.style.color = '#0f0';
+        };
+        reader.readAsArrayBuffer(file);
+      } else {
+        uploadedFiles.dockingPort = null;
+        statusElements.dockingPort.textContent = 'No file selected';
+        statusElements.dockingPort.style.color = '#0ff';
+      }
+    });
+    
+    // Function to validate combined configuration
+    function validateCombinedConfig(content) {
+      // Check for required sections
+      const requiredSections = ['cameras', 'cmg', 'spacecraftProperties', 'lamps', 'reactionwheels', 'thrusters'];
+      for (const section of requiredSections) {
+        if (!content[section]) {
+          console.warn(`Missing section in config: ${section}`);
+          return false;
+        }
+      }
+      
+      // Validate each section
+      if (!Array.isArray(content.cameras)) return false;
+      if (!Array.isArray(content.cmg?.cmgs)) return false;
+      if (typeof content.spacecraftProperties?.dryMass !== 'number') return false;
+      if (!Array.isArray(content.lamps?.lamps)) return false;
+      if (!Array.isArray(content.reactionwheels?.wheels)) return false;
+      if (!Array.isArray(content.thrusters?.thrusters)) return false;
+      
+      return true;
     }
-  });
-
-  updateHUD(satBody, hud, paused);
-  updateFuelGauge();
-  updateAttitudeControlStatus();
-  updateLampStatus();
+    
+    // Use defaults button
+    useDefaultsButton.addEventListener('click', () => {
+      // Clear all uploaded files
+      uploadedFiles.config = null;
+      uploadedFiles.spacecraftModel = null;
+      uploadedFiles.dockingPort = null;
+      fileInputs.config.value = '';
+      fileInputs.spacecraftModel.value = '';
+      fileInputs.dockingPort.value = '';
+      statusElements.config.textContent = 'No file selected';
+      statusElements.config.style.color = '#0ff';
+      statusElements.spacecraftModel.textContent = 'No file selected';
+      statusElements.spacecraftModel.style.color = '#0ff';
+      statusElements.dockingPort.textContent = 'No file selected';
+      statusElements.dockingPort.style.color = '#0ff';
+    });
+    
+    // Start simulation button
+    startSimulationButton.addEventListener('click', () => {
+      // Hide the menu and show the simulation
+      fileUploadMenu.style.display = 'none';
+      simulationContainer.style.display = 'block';
+      
+      // Make uploadedFiles available globally for the simulation
+      window.uploadedFiles = uploadedFiles;
+      
+      // Dispatch a custom event to signal that simulation should start
+      window.dispatchEvent(new CustomEvent('startSimulation'));
+    });
+  </script>
   
-  // Update distance information if enabled
-  if (showDistanceInfo) {
-    calculateDistancesToWalls();
-  }
-  
-  renderer.render(scene, camSys.getCamera());
-}
-window.addEventListener('resize', ()=>{
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  camSys.handleResize();
-});
-resetSimulation();
-main(); 
-</script>
-<!-- Add the new script file -->
-<script type="module" src="./modelControls.js"></script>
+  <!-- Simulation script (initially waits for the start event) -->
+  <script type="module" src="simulation.js"></script>
 </body>
 </html>
-

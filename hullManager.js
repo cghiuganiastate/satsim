@@ -1,4 +1,4 @@
-// hullManager.js
+// File: hullManager.js
 
 // Import necessary libraries directly into this module
 import * as THREE from 'three';
@@ -179,8 +179,11 @@ function createConvexHull(hullData, index, scene, world) {
 
 export function toggleHullVisibility() {
   showHulls = !showHulls;
+  
+  // Toggle hull meshes
   hullMeshes.forEach(mesh => {
     mesh.visible = showHulls;
   });
+  
   document.getElementById('hull-status').textContent = showHulls ? 'Hulls Visible' : 'Hulls Hidden';
-} 
+}

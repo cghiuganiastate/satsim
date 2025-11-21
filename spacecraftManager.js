@@ -1,14 +1,17 @@
-// spacecraftManager.js
-
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { STLLoader } from 'three/addons/loaders/STLLoader.js';
 
 // Spacecraft-related variables
-let spacecraftGroup = null; // We will use a group to contain the model and bounding box
+let spacecraftGroup = null;
 let spacecraftBoundingBoxMesh = null;
 let spacecraftBody = null;
+
+// Fuel system variables - SINGLE SOURCE OF TRUTH
+let dryMass = 5;
+let fuelMass = 5;
+let maxFuelMass = 5;
 
 // Load spacecraft model from a File object
 export function loadSpacecraft(file, scene, world, rotation, centroidModel, properties, onLoaded) {
@@ -24,7 +27,7 @@ export function loadSpacecraft(file, scene, world, rotation, centroidModel, prop
 
   // Create a group to hold the model and its bounding box
   spacecraftGroup = new THREE.Group();
-  spacecraftGroup.position.set(10, 0, 0); // Set initial position
+  spacecraftGroup.position.set(10, 0, 0);
   scene.add(spacecraftGroup);
 
   if (isGLB) {
@@ -60,7 +63,6 @@ export function loadSpacecraft(file, scene, world, rotation, centroidModel, prop
 function processLoadedModel(model, rotation, centroidModel, properties, scene, world, onLoaded) {
   // 1. Apply successive rotations FIRST
   if (rotation) {
-    // Note: The order of rotations matters. X, then Y, then Z is a common convention.
     if (rotation.x !== 0) {
       const qx = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), THREE.MathUtils.degToRad(rotation.x));
       model.quaternion.multiply(qx);
@@ -79,16 +81,12 @@ function processLoadedModel(model, rotation, centroidModel, properties, scene, w
   const box = new THREE.Box3().setFromObject(model);
   const size = box.getSize(new THREE.Vector3());
   const center = box.getCenter(new THREE.Vector3());
-
-  // This vector will hold the offset for our collision box and visual helper
   let collisionBoxOffset = new THREE.Vector3(0, 0, 0);
 
   // 3. Center the model if centroid option is checked
   if (centroidModel) {
     model.position.sub(center);
-    // If we center the model, the collision box is already aligned at the origin, so no offset is needed.
   } else {
-    // If we DON'T center the model, we need to offset the collision box to match the model's position.
     collisionBoxOffset.copy(center);
   }
 
@@ -98,27 +96,62 @@ function processLoadedModel(model, rotation, centroidModel, properties, scene, w
   // Create physics shape
   const shape = new CANNON.Box(new CANNON.Vec3(size.x / 2, size.y / 2, size.z / 2));
   
+  // Update fuel system variables if provided in properties
+  if (properties.dryMass !== undefined) dryMass = properties.dryMass;
+  if (properties.fuelMass !== undefined) fuelMass = properties.fuelMass;
+  if (properties.maxFuelMass !== undefined) maxFuelMass = properties.maxFuelMass;
+  
+  // Calculate total mass (dry mass + fuel mass)
+  const totalMass = dryMass + fuelMass;
+  
   // Create the body with custom properties if provided
   const bodyOptions = {
-    mass: properties.mass || 10000,
+    mass: totalMass,
     angularDamping: 0,
     linearDamping: 0,
     allowSleep: false
   };
   
-  // Add inertia if provided
-  if (properties.inertia) {
-    bodyOptions.inertia = new CANNON.Vec3(
-      properties.inertia.x || 0,
-      properties.inertia.y || 0,
-      properties.inertia.z || 0
-    );
-  }
-  
   spacecraftBody = new CANNON.Body(bodyOptions);
   
   // Add the shape with the calculated offset
   spacecraftBody.addShape(shape, new CANNON.Vec3(collisionBoxOffset.x, collisionBoxOffset.y, collisionBoxOffset.z));
+  
+  // --- CORRECT INERTIA FIX ---
+  // If custom inertia was provided, apply it using the correct Cannon-ES approach
+  if (properties.inertia) {
+      // DEBUG: Log that we are applying custom inertia
+      console.log("DEBUG: Applying custom inertia from properties:", properties.inertia);
+
+      // 1. Define your desired inertia values (Ixx, Iyy, Izz)
+      const customInertia = new CANNON.Vec3(
+        properties.inertia.x || 0, 
+        properties.inertia.y || 0, 
+        properties.inertia.z || 0
+      );
+      
+      // 2. Set the inertia and its inverse manually
+      spacecraftBody.inertia.copy(customInertia);
+      spacecraftBody.invInertia.set(
+        customInertia.x > 0 ? 1 / customInertia.x : 0,
+        customInertia.y > 0 ? 1 / customInertia.y : 0,
+        customInertia.z > 0 ? 1 / customInertia.z : 0
+      );
+      
+      // 3. Apply the changes to the world-space inertia
+      spacecraftBody.updateInertiaWorld(true);
+
+      // DEBUG: Log the inertia values on the body after applying them
+      console.log("DEBUG: Inertia on spacecraftBody after manual update:", {
+          x: spacecraftBody.inertia.x,
+          y: spacecraftBody.inertia.y,
+          z: spacecraftBody.inertia.z
+      });
+  } else {
+      // DEBUG: Log if no custom inertia was found in properties
+      console.log("DEBUG: No custom inertia found in properties. Using default values.");
+  }
+  // --- END CORRECT INERTIA FIX ---
   
   // Set the body's position to match the group's position
   spacecraftBody.position.copy(spacecraftGroup.position);
@@ -133,7 +166,7 @@ function processLoadedModel(model, rotation, centroidModel, properties, scene, w
     wireframe: true
   });
   spacecraftBoundingBoxMesh = new THREE.Mesh(boxGeometry, boxMaterial);
-  spacecraftBoundingBoxMesh.visible = false; // Hidden by default
+  spacecraftBoundingBoxMesh.visible = false;
   
   // Position the visual bounding box with the same offset
   spacecraftBoundingBoxMesh.position.copy(collisionBoxOffset);
@@ -171,4 +204,142 @@ export function updateSpacecraft() {
     spacecraftGroup.position.copy(spacecraftBody.position);
     spacecraftGroup.quaternion.copy(spacecraftBody.quaternion);
   }
+}
+
+// Function to update satellite mass based on fuel
+export function updateSatelliteMass() {
+  if (spacecraftBody) {
+    const totalMass = dryMass + fuelMass;
+    spacecraftBody.mass = totalMass;
+    // Remove this line as it recalculates inertia based on shape
+    // spacecraftBody.updateMassProperties();
+    
+    // Instead, just update the mass-related properties without recalculating inertia
+    spacecraftBody.invMass = totalMass > 0 ? 1 / totalMass : 0;
+  }
+}
+
+// Function to consume fuel
+export function consumeFuel(amount) {
+  fuelMass = Math.max(0, fuelMass - amount);
+  updateSatelliteMass();
+  return fuelMass;
+}
+
+// Function to get fuel status
+export function getFuelStatus() {
+  return {
+    dryMass,
+    fuelMass,
+    maxFuelMass,
+    fuelPercentage: (fuelMass / maxFuelMass) * 100
+  };
+}
+
+// Function to reset fuel
+export function resetFuel() {
+  fuelMass = maxFuelMass;
+  updateSatelliteMass();
+}
+
+// Function to apply new properties to the spacecraft
+export function setFuelProperties(properties) {
+  // Update the fuel system variables
+  if (properties.dryMass !== undefined) dryMass = properties.dryMass;
+  if (properties.fuelMass !== undefined) fuelMass = properties.fuelMass;
+  if (properties.maxFuelMass !== undefined) maxFuelMass = properties.maxFuelMass;
+
+  // Update the physics body if it exists
+  if (spacecraftBody) {
+    const totalMass = dryMass + fuelMass;
+    spacecraftBody.mass = totalMass;
+    spacecraftBody.invMass = totalMass > 0 ? 1 / totalMass : 0;
+
+    if (properties.inertia) {
+      // 1. Define your desired inertia values (Ixx, Iyy, Izz)
+      const customInertia = new CANNON.Vec3(
+        properties.inertia.x || 0, 
+        properties.inertia.y || 0, 
+        properties.inertia.z || 0
+      );
+      
+      // 2. Set the inertia and its inverse manually
+      spacecraftBody.inertia.copy(customInertia);
+      spacecraftBody.invInertia.set(
+        customInertia.x > 0 ? 1 / customInertia.x : 0,
+        customInertia.y > 0 ? 1 / customInertia.y : 0,
+        customInertia.z > 0 ? 1 / customInertia.z : 0
+      );
+      
+      // 3. Apply the changes to the world-space inertia
+      spacecraftBody.updateInertiaWorld(true);
+    }
+    
+    // Don't call updateMassProperties() as it will recalculate inertia
+    // spacecraftBody.updateMassProperties();
+  }
+}
+
+// Initialize default spacecraft with fuel system
+export function initializeDefaultSpacecraft(scene, world, properties = null) {
+  // Use provided properties or default values
+  const dryMassValue = properties && properties.dryMass !== undefined ? properties.dryMass : dryMass;
+  const fuelMassValue = properties && properties.fuelMass !== undefined ? properties.fuelMass : fuelMass;
+  const maxFuelMassValue = properties && properties.maxFuelMass !== undefined ? properties.maxFuelMass : maxFuelMass;
+  
+  // Update the global variables
+  dryMass = dryMassValue;
+  fuelMass = fuelMassValue;
+  maxFuelMass = maxFuelMassValue;
+  
+  const totalMass = dryMass + fuelMass;
+
+  const satBody = new CANNON.Body({
+    mass: totalMass,
+    shape: new CANNON.Box(new CANNON.Vec3(1, 1, 1)),
+    angularDamping: 0,
+    linearDamping: 0,
+    allowSleep: false
+  });
+  
+  satBody.position.set(0, -3, 5.5);
+  
+  const pitchQuaternion = new CANNON.Quaternion();
+  pitchQuaternion.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), -Math.PI/2);
+  satBody.quaternion.copy(pitchQuaternion);
+  
+  // --- CORRECT INERTIA FIX ---
+  // If custom inertia was provided, apply it using the correct Cannon-ES approach
+  if (properties && properties.inertia) {
+    // 1. Define your desired inertia values (Ixx, Iyy, Izz)
+    const customInertia = new CANNON.Vec3(
+      properties.inertia.x || 0, 
+      properties.inertia.y || 0, 
+      properties.inertia.z || 0
+    );
+    
+    // 2. Set the inertia and its inverse manually
+    satBody.inertia.copy(customInertia);
+    satBody.invInertia.set(
+      customInertia.x > 0 ? 1 / customInertia.x : 0,
+      customInertia.y > 0 ? 1 / customInertia.y : 0,
+      customInertia.z > 0 ? 1 / customInertia.z : 0
+    );
+    
+    // 3. Apply the changes to the world-space inertia
+    satBody.updateInertiaWorld(true);
+  }
+  // --- END CORRECT INERTIA FIX ---
+  
+  world.addBody(satBody);
+
+  const satGeo = new THREE.BoxGeometry(1, 1, 1);
+  const satMat = new THREE.MeshStandardMaterial({ color: 0x888888 });
+  const satMesh = new THREE.Mesh(satGeo, satMat);
+  scene.add(satMesh);
+
+  const satAxes = new THREE.AxesHelper(2);
+  satMesh.add(satAxes);
+
+  return { satBody, satMesh };
 }

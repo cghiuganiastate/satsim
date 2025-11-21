@@ -38,12 +38,39 @@ class AttitudeControlSystem {
         return this.loaded;
     }
 
+    // New function to initialize with configuration objects
+    async initializeWithConfigs(reactionWheelsConfig, cmgConfig) {
+        try {
+            if (reactionWheelsConfig) {
+                this.processReactionWheelsConfig(reactionWheelsConfig);
+                console.log('Reaction wheels loaded successfully from config');
+            }
+        } catch (error) {
+            console.warn('Failed to load reaction wheels from config:', error);
+        }
+
+        try {
+            if (cmgConfig) {
+                this.processCMGsConfig(cmgConfig);
+                console.log('CMGs loaded successfully from config');
+            }
+        } catch (error) {
+            console.warn('Failed to load CMGs from config:', error);
+        }
+
+        this.loaded = this.reactionWheels.length > 0 || this.cmgs.length > 0;
+        return this.loaded;
+    }
+
     async loadReactionWheels() {
         const response = await fetch('reactionwheels.json');
         if (!response.ok) throw new Error('Reaction wheels file not found');
         
         const data = await response.json();
-        
+        this.processReactionWheelsConfig(data);
+    }
+
+    processReactionWheelsConfig(data) {
         data.wheels.forEach((wheelConfig, index) => {
             const rawOrientation = new CANNON.Vec3(
                 wheelConfig.orientation.x ?? 0,
@@ -75,7 +102,10 @@ class AttitudeControlSystem {
         if (!response.ok) throw new Error('CMG file not found');
         
         const data = await response.json();
-        
+        this.processCMGsConfig(data);
+    }
+
+    processCMGsConfig(data) {
         data.cmgs.forEach((cmgConfig, index) => {
             const cmg = {
                 index: index,
@@ -138,7 +168,7 @@ class AttitudeControlSystem {
             const wheelAxis = wheel.orientation;
             const requestedTorqueAlongWheel = wheelAxis.dot(torque);
 
-            // Determine how much torque the wheel can actually apply before saturating
+            // Determine how much torque wheel can actually apply before saturating
             let actualTorqueApplied = 0;
             const dt = 1/60; // Time step
 
@@ -154,11 +184,11 @@ class AttitudeControlSystem {
                 actualTorqueApplied = Math.max(requestedTorqueAlongWheel, -maxPossibleTorque);
             }
 
-            // Update the wheel's angular momentum based on the ACTUAL torque applied
+            // Update wheel's angular momentum based on ACTUAL torque applied
             const deltaMomentum = actualTorqueApplied * dt;
             wheel.currentAngularMomentum += deltaMomentum;
             
-            // Apply reaction torque to the satellite (opposite to the ACTUAL torque applied to the wheel)
+            // Apply reaction torque to satellite (opposite to ACTUAL torque applied to wheel)
             const reactionTorque = wheelAxis.scale(-actualTorqueApplied);
 
             // Convert local torque to world coordinates correctly
@@ -197,7 +227,7 @@ class AttitudeControlSystem {
             cmg3.gimbalAngularVelocity = 0;
         }
         
-        // For simple inputs, command the skew CMG (CMG-4) to a neutral angle (zero rate)
+        // For simple inputs, command skew CMG (CMG-4) to a neutral angle (zero rate)
         const cmg4 = this.cmgs.find(c => c.name === 'CMG-4');
         if (cmg4) {
             cmg4.gimbalAngularVelocity = 0;
@@ -205,31 +235,31 @@ class AttitudeControlSystem {
 
         // --- 2. Update CMG State: Integrate gimbal rates to get new angles ---
         this.cmgs.forEach(cmg => {
-            // Clamp the gimbal velocity to its maximum physical speed
+            // Clamp gimbal velocity to its maximum physical speed
             cmg.gimbalAngularVelocity = Math.max(-cmg.maxGimbalRate, Math.min(cmg.maxGimbalRate, cmg.gimbalAngularVelocity));
             
-            // Update the angle based on the velocity
+            // Update angle based on velocity
             cmg.gimbalAngle += cmg.gimbalAngularVelocity * dt;
         });
 
-        // --- 3. Torque Application: Calculate the actual torque from the new gimbal rates ---
+        // --- 3. Torque Application: Calculate actual torque from new gimbal rates ---
         let totalOutputTorqueLocal = new CANNON.Vec3(0, 0, 0);
 
         this.cmgs.forEach(cmg => {
             const wheelAxis = cmg.wheelOrientation;
             const gimbalAxis = wheelAxis.cross(cmg.gimbalOrientation).unit();
             
-            // The momentum change rate (ḣ) is the key. This is what produces the torque.
+            // The momentum change rate (ḣ) is key. This is what produces torque.
             const h_dot = gimbalAxis.scale(cmg.gimbalAngularVelocity).cross(wheelAxis.scale(cmg.currentAngularMomentum));
             
-            // Sum the momentum change rate from each CMG
+            // Sum momentum change rate from each CMG
             totalOutputTorqueLocal.vadd(h_dot, totalOutputTorqueLocal);
         });
 
         // The torque on the satellite body is the negative of the total momentum change rate
         totalOutputTorqueLocal.scale(1, totalOutputTorqueLocal);
         
-        // Convert the total local torque to world coordinates and apply it
+        // Convert total local torque to world coordinates and apply it
         const worldTorque = new CANNON.Vec3();
         this.satBody.quaternion.vmult(totalOutputTorqueLocal, worldTorque);
         this.satBody.applyTorque(worldTorque);
