@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Spacecraft Editor</title>
+    <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.168.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.168.0/examples/jsm/",
+        "cannon-es": "https://unpkg.com/cannon-es@0.19.0/dist/cannon-es.js"
+      }
+    }
+    </script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #f0f0f0;
+        }
+        
+        #main-container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+        
+        #header {
+            display: flex;
+            background-color: #333;
+            color: white;
+            padding: 10px;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .tabs {
+            display: flex;
+        }
+        
+        .tab {
+            padding: 10px 20px;
+            cursor: pointer;
+            background-color: #555;
+            margin-right: 5px;
+            border-radius: 5px 5px 0 0;
+        }
+        
+        .tab.active {
+            background-color: #777;
+        }
+        
+        .header-actions {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .header-actions button {
+            padding: 5px 10px;
+            font-size: 12px;
+        }
+        
+        #content-container {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+        
+        #left-panel {
+            width: 300px;
+            background-color: #eee;
+            padding: 15px;
+            overflow-y: auto; /* Enable vertical scrolling */
+            height: 100%; /* Make sure it takes full height */
+            box-sizing: border-box; /* Include padding in height calculation */
+        }
+        
+        #scene-container {
+            flex: 1;
+            position: relative;
+        }
+        
+        #right-panel {
+            width: 250px;
+            background-color: #eee;
+            padding: 15px;
+            overflow-y: auto; /* Enable vertical scrolling */
+            height: 100%; /* Make sure it takes full height */
+            box-sizing: border-box; /* Include padding in height calculation */
+            transition: transform 0.3s ease;
+            transform: translateX(100%);
+            position: absolute;
+            right: 0;
+            top: 0;
+            height: 100%;
+            z-index: 10;
+            box-shadow: -2px 0 5px rgba(0,0,0,0.1);
+        }
+        
+        #right-panel.visible {
+            transform: translateX(0);
+        }
+        
+        .toggle-panel-btn {
+            position: absolute;
+            right: 250px;
+            top: 50%;
+            transform: translateY(-50%);
+            background-color: #777;
+            color: white;
+            border: none;
+            border-radius: 5px 0 0 5px;
+            padding: 10px 5px;
+            cursor: pointer;
+            z-index: 11;
+            transition: right 0.3s ease;
+        }
+        
+        .toggle-panel-btn.panel-hidden {
+            right: 0;
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        .feature-item {
+            background-color: #fff;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            padding: 10px;
+            margin-bottom: 10px;
+        }
+        
+        .feature-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+        }
+        
+        .feature-actions {
+            display: flex;
+            gap: 5px;
+        }
+        
+        .feature-controls {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        
+        .control-group {
+            display: flex;
+            align-items: center;
+            margin-bottom: 5px;
+        }
+        
+        .control-group label {
+            width: 60px;
+        }
+        
+        .control-group input {
+            flex: 1;
+        }
+        
+        button {
+            padding: 5px 10px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+            margin-bottom: 5px;
+        }
+        
+        button:hover {
+            background-color: #45a049;
+        }
+        
+        .copy-btn {
+            background-color: #2196F3;
+        }
+        
+        .copy-btn:hover {
+            background-color: #0b7dda;
+        }
+        
+        .delete-btn {
+            background-color: #f44336;
+        }
+        
+        .delete-btn:hover {
+            background-color: #d32f2f;
+        }
+        
+        #notification {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            padding: 15px;
+            background-color: #4CAF50;
+            color: white;
+            border-radius: 5px;
+            display: none;
+            z-index: 1000;
+        }
+    </style>
+</head>
+<body>
+    <div id="main-container">
+        <div id="header">
+            <div class="tabs">
+                <div class="tab active" data-tab="model">Model</div>
+                <div class="tab" data-tab="thrusters">Thrusters</div>
+                <div class="tab" data-tab="cameras">Cameras</div>
+                <div class="tab" data-tab="attitude">Attitude</div>
+                <div class="tab" data-tab="lights">Lights</div>
+            </div>
+            <div class="header-actions">
+                <button id="import-config">Import Config</button>
+                <button id="export-config">Export Config</button>
+            </div>
+        </div>
+        
+        <div id="content-container">
+            <div id="left-panel">
+                <!-- Model Tab Content -->
+                <div id="model-tab" class="tab-content active">
+                    <h3>Model Features</h3>
+                    <div id="model-features">
+                        <!-- Features will be added here dynamically -->
+                    </div>
+                    <button id="add-rotation">Add Rotation</button>
+                    <button id="add-translation">Add Translation</button>
+                </div>
+                
+                <!-- Thrusters Tab Content -->
+                <div id="thrusters-tab" class="tab-content">
+                    <h3>Thrusters</h3>
+                    <div id="thrusters-list">
+                        <!-- Thrusters will be added here dynamically -->
+                    </div>
+                    <button id="add-thruster">Add Thruster</button>
+                </div>
+                
+                <!-- Cameras Tab Content -->
+                <div id="cameras-tab" class="tab-content">
+                    <h3>Cameras</h3>
+                    <div id="cameras-list">
+                        <!-- Cameras will be added here dynamically -->
+                    </div>
+                    <button id="add-camera">Add Camera</button>
+                </div>
+                
+                <!-- Attitude Tab Content -->
+                <div id="attitude-tab" class="tab-content">
+                    <h3>Attitude Control</h3>
+                    <div id="attitude-controls">
+                        <!-- Attitude controls will be added here dynamically -->
+                    </div>
+                    <button id="add-cmg">Add CMG</button>
+                    <button id="add-reaction-wheel">Add Reaction Wheel</button>
+                </div>
+                
+                <!-- Lights Tab Content -->
+                <div id="lights-tab" class="tab-content">
+                    <h3>Lights</h3>
+                    <div id="lights-list">
+                        <!-- Lights will be added here dynamically -->
+                    </div>
+                    <button id="add-light">Add Light</button>
+                </div>
+            </div>
+            
+            <div id="scene-container">
+                <!-- Three.js scene will be rendered here -->
+            </div>
+            
+            <button id="toggle-panel" class="toggle-panel-btn panel-hidden">☰</button>
+            
+            <div id="right-panel">
+                <h3>Spacecraft Properties</h3>
+                <div class="control-group">
+                    <label>Name:</label>
+                    <input type="text" id="spacecraft-name" value="Custom Spacecraft">
+                </div>
+                <div class="control-group">
+                    <label>Description:</label>
+                    <input type="text" id="spacecraft-description" value="A custom spacecraft with specific properties">
+                </div>
+                <div class="control-group">
+                    <label>Dry Mass:</label>
+                    <input type="number" id="dry-mass" value="5">
+                </div>
+                <div class="control-group">
+                    <label>Fuel Mass:</label>
+                    <input type="number" id="fuel-mass" value="5">
+                </div>
+                <div class="control-group">
+                    <label>Max Fuel:</label>
+                    <input type="number" id="max-fuel-mass" value="5">
+                </div>
+                <h4>Inertia</h4>
+                <div class="control-group">
+                    <label>X:</label>
+                    <input type="number" id="inertia-x" value="3">
+                </div>
+                <div class="control-group">
+                    <label>Y:</label>
+                    <input type="number" id="inertia-y" value="3">
+                </div>
+                <div class="control-group">
+                    <label>Z:</label>
+                    <input type="number" id="inertia-z" value="3">
+                </div>
+                <button id="import-model">Import Model</button>
+                <div id="notification"></div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="main.js"></script>
+</body>
+</html>
