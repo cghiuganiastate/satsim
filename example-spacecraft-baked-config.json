@@ -1,0 +1,351 @@
+{
+  "cameras": [
+    {
+      "id": 0,
+      "name": "Camera 0",
+      "position": {
+        "x": 0,
+        "y": 0,
+        "z": 0.2
+      },
+      "rotation": {
+        "x": 0,
+        "y": 3.141592653589793,
+        "z": 0
+      },
+      "fov": 75
+    }
+  ],
+  "cmg": {
+    "cmgs": []
+  },
+  "spacecraftProperties": {
+    "dryMass": 5,
+    "fuelMass": 5,
+    "maxFuelMass": 5,
+    "inertia": {
+      "x": 3,
+      "y": 3,
+      "z": 3
+    },
+    "name": "Custom Spacecraft",
+    "description": "A custom spacecraft with specific properties",
+    "centerOfMass": {
+      "x": 0,
+      "y": 0,
+      "z": 0
+    }
+  },
+  "lamps": {
+    "lamps": [
+      {
+        "id": 0,
+        "name": "Light 0",
+        "position": {
+          "x": 0,
+          "y": 0.1,
+          "z": 0.2
+        },
+        "rotation": {
+          "x": 0,
+          "y": -3.141592653589793,
+          "z": 0
+        },
+        "color": "#ffffff",
+        "intensity": 5,
+        "distance": 20,
+        "angle": 0.5235987755982988,
+        "penumbra": 0.2,
+        "castShadow": false
+      }
+    ]
+  },
+  "reactionwheels": {
+    "wheels": [
+      {
+        "id": 0,
+        "name": "RW-X",
+        "orientation": {
+          "x": 1,
+          "y": 0,
+          "z": 0
+        },
+        "position": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "maxAngularMomentum": 15,
+        "maxTorque": 0.5
+      },
+      {
+        "id": 1,
+        "name": "AttitudeComponent RW 1",
+        "orientation": {
+          "x": 0,
+          "y": 1,
+          "z": 0
+        },
+        "position": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "maxAngularMomentum": 15,
+        "maxTorque": 0.5
+      },
+      {
+        "id": 2,
+        "name": "AttitudeComponent RW 2",
+        "orientation": {
+          "x": 0,
+          "y": 0,
+          "z": 1
+        },
+        "position": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "maxAngularMomentum": 15,
+        "maxTorque": 0.5
+      }
+    ]
+  },
+  "thrusters": {
+    "thrusters": [
+      {
+        "id": 7,
+        "name": "Thruster 7",
+        "position": [
+          0.2,
+          -0.2,
+          -0.2
+        ],
+        "direction": [
+          0,
+          0,
+          1
+        ],
+        "thrust": 1,
+        "isp": 200,
+        "keybind": [
+          "w",
+          "i",
+          "l"
+        ],
+        "autoBind": true
+      },
+      {
+        "id": 8,
+        "name": "Thruster 8",
+        "position": [
+          -0.2,
+          -0.2,
+          -0.2
+        ],
+        "direction": [
+          0,
+          0,
+          1
+        ],
+        "thrust": 1,
+        "isp": 200,
+        "keybind": [
+          "w",
+          "i",
+          "j"
+        ],
+        "autoBind": true
+      },
+      {
+        "id": 9,
+        "name": "Thruster 9",
+        "position": [
+          -0.2,
+          0.2,
+          -0.2
+        ],
+        "direction": [
+          0,
+          0,
+          1
+        ],
+        "thrust": 1,
+        "isp": 200,
+        "keybind": [
+          "w",
+          "k",
+          "j"
+        ],
+        "autoBind": true
+      },
+      {
+        "id": 10,
+        "name": "Thruster 10",
+        "position": [
+          0.2,
+          0.2,
+          -0.2
+        ],
+        "direction": [
+          0,
+          0,
+          1
+        ],
+        "thrust": 1,
+        "isp": 200,
+        "keybind": [
+          "w",
+          "k",
+          "l"
+        ],
+        "autoBind": true
+      },
+      {
+        "id": 11,
+        "name": "Thruster 11",
+        "position": [
+          0.2,
+          0.2,
+          0
+        ],
+        "direction": [
+          -1,
+          0,
+          0
+        ],
+        "thrust": 1,
+        "isp": 200,
+        "keybind": [
+          "d",
+          "o"
+        ],
+        "autoBind": true
+      },
+      {
+        "id": 12,
+        "name": "Thruster 12",
+        "position": [
+          0.2,
+          -0.2,
+          0
+        ],
+        "direction": [
+          -1,
+          0,
+          0
+        ],
+        "thrust": 1,
+        "isp": 200,
+        "keybind": [
+          "d",
+          "u"
+        ],
+        "autoBind": true
+      },
+      {
+        "id": 13,
+        "name": "Thruster 13",
+        "position": [
+          -0.2,
+          -0.2,
+          0
+        ],
+        "direction": [
+          1,
+          0,
+          0
+        ],
+        "thrust": 1,
+        "isp": 200,
+        "keybind": [
+          "a",
+          "o"
+        ],
+        "autoBind": true
+      },
+      {
+        "id": 14,
+        "name": "Thruster 14",
+        "position": [
+          -0.2,
+          0.2,
+          0
+        ],
+        "direction": [
+          1,
+          0,
+          0
+        ],
+        "thrust": 1,
+        "isp": 200,
+        "keybind": [
+          "a",
+          "u"
+        ],
+        "autoBind": true
+      },
+      {
+        "id": 15,
+        "name": "Thruster 15",
+        "position": [
+          0,
+          0,
+          0.1
+        ],
+        "direction": [
+          0,
+          0,
+          -1
+        ],
+        "thrust": 1,
+        "isp": 200,
+        "keybind": [
+          "s"
+        ],
+        "autoBind": true
+      },
+      {
+        "id": 16,
+        "name": "Thruster 16",
+        "position": [
+          0,
+          -0.2,
+          0
+        ],
+        "direction": [
+          0,
+          1,
+          0
+        ],
+        "thrust": 1,
+        "isp": 200,
+        "keybind": [
+          "e"
+        ],
+        "autoBind": true
+      },
+      {
+        "id": 17,
+        "name": "Thruster 17",
+        "position": [
+          0,
+          0.2,
+          0
+        ],
+        "direction": [
+          0,
+          -1,
+          0
+        ],
+        "thrust": 1,
+        "isp": 200,
+        "keybind": [
+          "q"
+        ],
+        "autoBind": true
+      }
+    ]
+  }
+}

@@ -87,9 +87,9 @@ function processThrusterConfig(config, CANNON, satMesh, keyToThrusterIndices, cr
     // ---------- AUTO-MAPPING ----------
     // Translation: thruster points mostly along one axis
     const dot = (a, b) => a.dot(b);
-    if (Math.abs(dot(dir, new CANNON.Vec3(0, 0, 1))) > 0.9) keyToThrusterIndices[dir.z > 0 ? 'w' : 's'].push(i);
-    if (Math.abs(dot(dir, new CANNON.Vec3(1, 0, 0))) > 0.9) keyToThrusterIndices[dir.x > 0 ? 'a' : 'd'].push(i);
-    if (Math.abs(dot(dir, new CANNON.Vec3(0, 1, 0))) > 0.9) keyToThrusterIndices[dir.y > 0 ? 'e' : 'q'].push(i);
+    if (Math.abs(dot(dir, new CANNON.Vec3(0, 0, 1))) > 0.7) keyToThrusterIndices[dir.z > 0 ? 'w' : 's'].push(i);
+    if (Math.abs(dot(dir, new CANNON.Vec3(1, 0, 0))) > 0.7) keyToThrusterIndices[dir.x > 0 ? 'a' : 'd'].push(i);
+    if (Math.abs(dot(dir, new CANNON.Vec3(0, 1, 0))) > 0.7) keyToThrusterIndices[dir.y > 0 ? 'e' : 'q'].push(i);
 
     // Rotation: torque = r × F  (lever arm × direction)
     const lever = pos;

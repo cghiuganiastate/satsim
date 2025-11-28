@@ -288,7 +288,7 @@ function createDockingPort(geometry) {
 
   function createThrusterVisual(pos, dir){
     const group = new THREE.Group();
-    const cone = new THREE.ConeGeometry(0.15,0.4,8);
+    const cone = new THREE.ConeGeometry(0.15/5,0.4/5,8);
     const mat = new THREE.MeshStandardMaterial({
       color:0xff5500, emissive:0x000000, metalness:0.1, roughness:0.8
     });
