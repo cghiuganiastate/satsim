@@ -87,15 +87,14 @@
             width: 250px;
             background-color: #eee;
             padding: 15px;
-            overflow-y: auto; /* Enable vertical scrolling */
-            height: 100%; /* Make sure it takes full height */
-            box-sizing: border-box; /* Include padding in height calculation */
+            overflow-y: auto;
+            box-sizing: border-box;
             transition: transform 0.3s ease;
             transform: translateX(100%);
             position: absolute;
             right: 0;
-            top: 0;
-            height: 100%;
+            top: 50px; /* Pushes the panel down by 50px */
+            height: calc(100% - 50px); /* Adjusts the height to fit the remaining space */
             z-index: 10;
             box-shadow: -2px 0 5px rgba(0,0,0,0.1);
         }
@@ -226,6 +225,8 @@
             <div class="header-actions">
                 <button id="import-config">Import Config</button>
                 <button id="export-config">Export Config</button>
+                <!-- NEW: Bake Config Button -->
+                <button id="bake-config">Bake Config</button>
             </div>
         </div>
         
@@ -284,7 +285,6 @@
             </div>
             
             <button id="toggle-panel" class="toggle-panel-btn panel-hidden">☰</button>
-            
             <div id="right-panel">
                 <h3>Spacecraft Properties</h3>
                 <div class="control-group">
@@ -293,7 +293,7 @@
                 </div>
                 <div class="control-group">
                     <label>Description:</label>
-                    <input type="text" id="spacecraft-description" value="A custom spacecraft with specific properties">
+                    <textarea id="spacecraft-description" rows="3">A custom spacecraft with specific properties</textarea>
                 </div>
                 <div class="control-group">
                     <label>Dry Mass:</label>
@@ -320,7 +320,29 @@
                     <label>Z:</label>
                     <input type="number" id="inertia-z" value="3">
                 </div>
+            
+                <!-- New Center of Mass Section -->
+                <h4>Center of Mass (CG)</h4>
+                <div class="control-group">
+                    <label>X:</label>
+                    <input type="number" id="cg-x" value="0" step="0.1">
+                </div>
+                <div class="control-group">
+                    <label>Y:</label>
+                    <input type="number" id="cg-y" value="0" step="0.1">
+                </div>
+                <div class="control-group">
+                    <label>Z:</label>
+                    <input type="number" id="cg-z" value="0" step="0.1">
+                </div>
+                <div class="control-group">
+                    <label>Show CG:</label>
+                    <input type="checkbox" id="toggle-cg-visual">
+                </div>
+                
                 <button id="import-model">Import Model</button>
+                <!-- NEW: Export Model Button -->
+                <button id="export-model">Export Model</button>
                 <div id="notification"></div>
             </div>
         </div>

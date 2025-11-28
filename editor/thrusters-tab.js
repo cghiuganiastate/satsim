@@ -47,7 +47,7 @@ export class ThrustersTab extends FeatureManager {
     
     createThrusterVisual(pos, dir) {
         const group = new THREE.Group();
-        const cone = new THREE.ConeGeometry(0.15/10, 0.4/10, 8); // radius, height, n-sides
+        const cone = new THREE.ConeGeometry(0.15/5, 0.4/5, 8); // radius, height, n-sides
         const mat = new THREE.MeshStandardMaterial({
             color: 0xff5500, 
             emissive: 0x000000, 
@@ -67,18 +67,19 @@ export class ThrustersTab extends FeatureManager {
     // Auto-binding logic that returns an array of keys
     autoBindThruster(thruster) {
         const dir = new THREE.Vector3(thruster.direction[0], thruster.direction[1], thruster.direction[2]);
+        dir.normalize(); // Add this line to normalize the direction vector
         const pos = new THREE.Vector3(thruster.position[0], thruster.position[1], thruster.position[2]);
         const keys = [];
         
         // Translation: thruster points mostly along one axis
         const dot = (a, b) => a.dot(b);
-        if (Math.abs(dot(dir, new THREE.Vector3(0, 0, 1))) > 0.9) {
+        if (Math.abs(dot(dir, new THREE.Vector3(0, 0, 1))) > 0.7) {
             keys.push(dir.z > 0 ? 'w' : 's');
         }
-        if (Math.abs(dot(dir, new THREE.Vector3(1, 0, 0))) > 0.9) {
-            keys.push(dir.x > 0 ? 'd' : 'a');
+        if (Math.abs(dot(dir, new THREE.Vector3(1, 0, 0))) > 0.7) {
+            keys.push(dir.x > 0 ? 'a' : 'd');
         }
-        if (Math.abs(dot(dir, new THREE.Vector3(0, 1, 0))) > 0.9) {
+        if (Math.abs(dot(dir, new THREE.Vector3(0, 1, 0))) > 0.7) {
             keys.push(dir.y > 0 ? 'e' : 'q');
         }
         

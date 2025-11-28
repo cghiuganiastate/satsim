@@ -27,10 +27,12 @@ export class ModelTab extends FeatureManager {
             this.initialQuaternion.identity();
         }
         
-        this.features = [];
-        this.updateFeaturesList();
+        // REMOVED: this.features = [];
+        // We no longer clear the features when a new model is loaded.
+        // This allows existing transformations to be applied to the new model.
+        
         this.updateSpacecraftData();
-this.updateFeaturesList();
+        this.updateFeaturesList();
     }
     
     setupEventListeners() {
@@ -73,15 +75,15 @@ this.updateFeaturesList();
     }
     
     // --- CORE TRANSFORMATION LOGIC ---
-    updateSpacecraftData() {
-        // This method OVERRIDES the parent's updateSpacecraftData.
-        // It's the single source of truth for saving the model's state.
-        if (!this.model) return;
 
+    updateSpacecraftData() {
+        // This method OVERRIDES the parent's version to prevent it from overwriting our data.
+        if (!this.model) return;
+        
         // 1. Reset the model to its original state
         this.model.position.copy(this.initialPosition);
         this.model.quaternion.copy(this.initialQuaternion);
-
+        
         // 2. Apply each transformation in sequence
         this.features.forEach(feature => {
             if (feature.type === 'rotation') {
@@ -93,14 +95,15 @@ this.updateFeaturesList();
                 this.model.position.add(new THREE.Vector3(feature.vector.x, feature.vector.y, feature.vector.z));
             }
         });
-
-        // 3. Update the spacecraft data with the final state
+        
+        // 3. Update the spacecraft data with the COMPLETE state (position, quaternion, AND features)
         this.spacecraftData.model = {
             position: { x: this.model.position.x, y: this.model.position.y, z: this.model.position.z },
             quaternion: { x: this.model.quaternion.x, y: this.model.quaternion.y, z: this.model.quaternion.z, w: this.model.quaternion.w },
-            features: this.features // Save the list of features as well
+            features: this.features
         };
     }
+    
     // --- OVERRIDDEN METHODS TO ENSURE CORRECT BEHAVIOR ---
 
     // Override deleteFeature to re-apply transformations after deletion
@@ -147,33 +150,7 @@ this.updateFeaturesList();
         // After updating the data, re-apply all transformations and save
         this.updateSpacecraftData();
     }
-    updateSpacecraftData() {
-        // This method OVERRIDES the parent's version to prevent it from overwriting our data.
-        if (!this.model) return;
-        
-        // 1. Reset the model to its original state
-        this.model.position.copy(this.initialPosition);
-        this.model.quaternion.copy(this.initialQuaternion);
-        
-        // 2. Apply each transformation in sequence
-        this.features.forEach(feature => {
-            if (feature.type === 'rotation') {
-                const axis = new THREE.Vector3(feature.axis.x, feature.axis.y, feature.axis.z).normalize();
-                const angle = THREE.MathUtils.degToRad(feature.angle);
-                const rotation = new THREE.Quaternion().setFromAxisAngle(axis, angle);
-                this.model.quaternion.multiply(rotation);
-            } else if (feature.type === 'translation') {
-                this.model.position.add(new THREE.Vector3(feature.vector.x, feature.vector.y, feature.vector.z));
-            }
-        });
-        
-        // 3. Update the spacecraft data with the COMPLETE state (position, quaternion, AND features)
-        this.spacecraftData.model = {
-            position: { x: this.model.position.x, y: this.model.position.y, z: this.model.position.z },
-            quaternion: { x: this.model.quaternion.x, y: this.model.quaternion.y, z: this.model.quaternion.z, w: this.model.quaternion.w },
-            features: this.features
-        };
-    }
+    
     updateFeaturesList() {
         const featuresContainer = document.getElementById(this.containerId);
         featuresContainer.innerHTML = '';
@@ -255,7 +232,6 @@ this.updateFeaturesList();
                 this.featureIdCounter = Math.max(...this.features.map(f => f.id || 0)) + 1;
             }
             this.updateSpacecraftData();
-this.updateFeaturesList();
             this.updateFeaturesList();
         }
     }
