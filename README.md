@@ -29,7 +29,7 @@ You can resume editing your config by importing it, and you can export it to sav
 Custom keybinds for thrusters arent implemented yet in the main app(if you're feeling brave, open a PR), so use the autobind checkbox to see what your controls will be. Good luck. 
 
 ### Attitude
-CMGs are wrongly implemented, this will be fixed at some later point in time. Also the postions of reaction wheels have no effect so those lines may be left blank. Also, I think if your reaction wheels are not orthogonal or you have more than 3, the simulation may freak out. This may also happen if you have more than 1 CMG, I haven't tested it. Please let me know if this happens.
+The postions of reaction wheels have no effect so those lines may be left blank. Also, I think if your reaction wheels are not orthogonal or you have more than 3, the simulation may freak out. This may also happen if you have more than 1 CMG, I haven't tested it. Please let me know if this happens.
 
 # Problems
 If you have any problems, or suggestions for improvements, please let me know. 
