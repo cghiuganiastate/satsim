@@ -14,32 +14,10 @@
     }
   ],
   "cmg": {
-    "cmgs": [
-      {
-        "name": "CMG-1",
-        "gimbalOrientation": { "x": 1, "y": 0, "z": 0 },
-        "wheelOrientation": { "x": 0, "y": 0, "z": 1 },
-        "position": { "x": 0.5, "y": 0, "z": 0 },
-        "maxAngularMomentum": 50,
-        "maxTorque": 2
-      },
-      {
-        "name": "CMG-2",
-        "gimbalOrientation": { "x": 0, "y": 1, "z": 0 },
-        "wheelOrientation": { "x": 0, "y": 0, "z": 1 },
-        "position": { "x": 0, "y": 0.5, "z": 0 },
-        "maxAngularMomentum": 50,
-        "maxTorque": 2
-      },
-      {
-        "name": "CMG-3",
-        "gimbalOrientation": { "x": 0, "y": 0, "z": 1 },
-        "wheelOrientation": { "x": 1, "y": 0, "z": 0 },
-        "position": { "x": 0, "y": 0, "z": 0.5 },
-        "maxAngularMomentum": 50,
-        "maxTorque": 2
-      }
-    ]
+    "cmg": {
+      "maxAngularMomentum": 20,
+      "maxTorque": 20
+    }
   },
   "spacecraftProperties": {
     "dryMass": 5,

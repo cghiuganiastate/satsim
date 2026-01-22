@@ -44,22 +44,17 @@ export class AttitudeTab extends FeatureManager {
 
     /**
      * Adds a new CMG feature.
+     * CMGs work like reaction wheels but only have maxAngularMomentum and maxTorque settings.
      */
     addCMG() {
         const cmg = {
             id: this.cmgIdCounter++,
-            name: `CMG-1`, // Default name
-            gimbalOrientation: { x: 0, y: 0, z: 1 },
-            wheelOrientation: { x: 1, y: 0, z: 0 },
-            position: { x: 0, y: 0, z: 0 },
-            maxAngularMomentum: 50,
-            maxTorque: 2
+            name: `CMG-${this.cmgIdCounter}`,
+            maxAngularMomentum: 200,
+            maxTorque: 5
         };
 
         this.cmgs.push(cmg);
-        const visual = this.createVisual(cmg, 'cmg');
-        this.cmgVisuals.push(visual);
-        this.scene.add(visual.arrow);
         
         this.updateSpacecraftData();
         this.updateFeaturesList();
@@ -70,15 +65,20 @@ export class AttitudeTab extends FeatureManager {
      * @param {object} feature - The RW or CMG configuration object.
      * @param {string} type - 'rw' for Reaction Wheel, 'cmg' for Control Moment Gyroscope.
      * @returns {object} An object containing the visual.
+     * Note: CMGs no longer have visual representation in the simplified model.
      */
     createVisual(feature, type) {
         const dir = new THREE.Vector3(
-            type === 'rw' ? feature.orientation.x : feature.gimbalOrientation.x,
-            type === 'rw' ? feature.orientation.y : feature.gimbalOrientation.y,
-            type === 'rw' ? feature.orientation.z : feature.gimbalOrientation.z
+            type === 'rw' ? feature.orientation.x : 0,
+            type === 'rw' ? feature.orientation.y : 0,
+            type === 'rw' ? feature.orientation.z : 1
         ).normalize();
 
-        const origin = new THREE.Vector3(feature.position.x, feature.position.y, feature.position.z);
+        const origin = new THREE.Vector3(
+            type === 'rw' ? feature.position.x : 0,
+            type === 'rw' ? feature.position.y : 0,
+            type === 'rw' ? feature.position.z : 0
+        );
         const length = 2; // Length of the arrow
         const color = type === 'rw' ? 0x00ff00 : 0xff0000; // Green for RW, Red for CMG
 
@@ -102,7 +102,11 @@ export class AttitudeTab extends FeatureManager {
         
         const feature = features[index];
         const visual = visuals[index];
-        if (!feature || !visual) return;
+        // CMGs don't have visuals, so only check visual for RWs
+        if (!feature || (type === 'rw' && !visual)) return;
+
+        console.log('DEBUG: updateFeature - type:', type, 'index:', index, 'property:', property, 'value:', value);
+        console.log('DEBUG: Feature before update:', JSON.stringify(feature));
 
         const numValue = parseFloat(value);
         
@@ -111,23 +115,27 @@ export class AttitudeTab extends FeatureManager {
             const [parent, child] = property.split('.');
             feature[parent][child] = isNaN(numValue) ? 0 : numValue;
         } else {
-            feature[property] = value;
+            // Use parsed number for numeric properties, original string for others (like name)
+            feature[property] = isNaN(numValue) ? value : numValue;
         }
 
-        // Update the visual if position or orientation changed
-        if (property.startsWith('position.') || property.startsWith('orientation.') || property.startsWith('gimbalOrientation.')) {
+        console.log('DEBUG: Feature after update:', JSON.stringify(feature));
+        console.log('DEBUG: this.cmgs === spacecraftData.cmg.cmgs:', this.cmgs === this.spacecraftData.cmg.cmgs);
+        console.log('DEBUG: spacecraftData.cmg.cmgs[index]:', JSON.stringify(this.spacecraftData.cmg.cmgs[index]));
+
+        // Update the visual if position or orientation changed (only for RWs)
+        if (type === 'rw' && (property.startsWith('position.') || property.startsWith('orientation.'))) {
             const arrow = visual.arrow;
             
             // Update position
             arrow.position.set(feature.position.x, feature.position.y, feature.position.z);
             
             // Update direction
-            const dir = new THREE.Vector3();
-            if (type === 'rw') {
-                dir.set(feature.orientation.x, feature.orientation.y, feature.orientation.z);
-            } else {
-                dir.set(feature.gimbalOrientation.x, feature.gimbalOrientation.y, feature.gimbalOrientation.z);
-            }
+            const dir = new THREE.Vector3(
+                feature.orientation.x,
+                feature.orientation.y,
+                feature.orientation.z
+            );
             dir.normalize();
             arrow.setDirection(dir);
         }
@@ -153,18 +161,15 @@ export class AttitudeTab extends FeatureManager {
         // Assign new ID and name
         if (type === 'rw') {
             newFeature.id = this.rwIdCounter++;
-            newFeature.name = `${this.featureType} RW ${newFeature.id}`;
+            newFeature.name = `RW-${newFeature.id}`;
             this.reactionWheels.push(newFeature);
             const visual = this.createVisual(newFeature, 'rw');
             this.rwVisuals.push(visual);
             this.scene.add(visual.arrow);
         } else {
             newFeature.id = this.cmgIdCounter++;
-            newFeature.name = `${this.featureType} CMG ${newFeature.id}`;
+            newFeature.name = `CMG-${newFeature.id}`;
             this.cmgs.push(newFeature);
-            const visual = this.createVisual(newFeature, 'cmg');
-            this.cmgVisuals.push(visual);
-            this.scene.add(visual.arrow);
         }
 
         this.updateSpacecraftData();
@@ -197,8 +202,14 @@ export class AttitudeTab extends FeatureManager {
      * Overrides the parent method to update the correct paths in spacecraftData.
      */
     updateSpacecraftData() {
+        console.log('DEBUG: updateSpacecraftData called - cmgs length:', this.cmgs.length, 'cmgs:', JSON.stringify(this.cmgs));
         this.spacecraftData.reactionwheels = { wheels: this.reactionWheels };
+        // CMG format: same as reaction wheels - store as array in cmgs property
+        // CRITICAL: Assign this.cmgs directly to maintain reference
+        // Do NOT use deep copy here as it breaks the reference!
         this.spacecraftData.cmg = { cmgs: this.cmgs };
+        console.log('DEBUG: Updated spacecraftData.cmg:', JSON.stringify(this.spacecraftData.cmg));
+        console.log('DEBUG: this.cmgs === spacecraftData.cmg.cmgs:', this.cmgs === this.spacecraftData.cmg.cmgs);
     }
 
     /**
@@ -215,8 +226,6 @@ export class AttitudeTab extends FeatureManager {
             const element = document.createElement('div');
             element.className = 'feature-item';
             
-            const title = type === 'rw' ? 'Reaction Wheel' : 'CMG';
-            
             element.innerHTML = `
                 <div class="feature-header">
                     <h4>${feature.name}</h4>
@@ -227,21 +236,14 @@ export class AttitudeTab extends FeatureManager {
                 </div>
                 <div class="feature-controls">
                     <div class="control-group"><label>Name:</label><input type="text" class="attitude-input" data-type="${type}" data-index="${index}" data-property="name" value="${feature.name}"></div>
+                    ${type === 'rw' ? `
                     <div class="control-group"><label>Position X:</label><input type="number" class="attitude-input" data-type="${type}" data-index="${index}" data-property="position.x" value="${feature.position.x}" step="0.1"></div>
                     <div class="control-group"><label>Position Y:</label><input type="number" class="attitude-input" data-type="${type}" data-index="${index}" data-property="position.y" value="${feature.position.y}" step="0.1"></div>
                     <div class="control-group"><label>Position Z:</label><input type="number" class="attitude-input" data-type="${type}" data-index="${index}" data-property="position.z" value="${feature.position.z}" step="0.1"></div>
-                    ${type === 'rw' ? `
                     <div class="control-group"><label>Orientation X:</label><input type="number" class="attitude-input" data-type="${type}" data-index="${index}" data-property="orientation.x" value="${feature.orientation.x}" step="0.1"></div>
                     <div class="control-group"><label>Orientation Y:</label><input type="number" class="attitude-input" data-type="${type}" data-index="${index}" data-property="orientation.y" value="${feature.orientation.y}" step="0.1"></div>
                     <div class="control-group"><label>Orientation Z:</label><input type="number" class="attitude-input" data-type="${type}" data-index="${index}" data-property="orientation.z" value="${feature.orientation.z}" step="0.1"></div>
-                    ` : `
-                    <div class="control-group"><label>Gimbal Orient. X:</label><input type="number" class="attitude-input" data-type="${type}" data-index="${index}" data-property="gimbalOrientation.x" value="${feature.gimbalOrientation.x}" step="0.1"></div>
-                    <div class="control-group"><label>Gimbal Orient. Y:</label><input type="number" class="attitude-input" data-type="${type}" data-index="${index}" data-property="gimbalOrientation.y" value="${feature.gimbalOrientation.y}" step="0.1"></div>
-                    <div class="control-group"><label>Gimbal Orient. Z:</label><input type="number" class="attitude-input" data-type="${type}" data-index="${index}" data-property="gimbalOrientation.z" value="${feature.gimbalOrientation.z}" step="0.1"></div>
-                    <div class="control-group"><label>Wheel Orient. X:</label><input type="number" class="attitude-input" data-type="${type}" data-index="${index}" data-property="wheelOrientation.x" value="${feature.wheelOrientation.x}" step="0.1"></div>
-                    <div class="control-group"><label>Wheel Orient. Y:</label><input type="number" class="attitude-input" data-type="${type}" data-index="${index}" data-property="wheelOrientation.y" value="${feature.wheelOrientation.y}" step="0.1"></div>
-                    <div class="control-group"><label>Wheel Orient. Z:</label><input type="number" class="attitude-input" data-type="${type}" data-index="${index}" data-property="wheelOrientation.z" value="${feature.wheelOrientation.z}" step="0.1"></div>
-                    `}
+                    ` : ''}
                     <div class="control-group"><label>Max Ang. Momentum:</label><input type="number" class="attitude-input" data-type="${type}" data-index="${index}" data-property="maxAngularMomentum" value="${feature.maxAngularMomentum}" step="1"></div>
                     <div class="control-group"><label>Max Torque:</label><input type="number" class="attitude-input" data-type="${type}" data-index="${index}" data-property="maxTorque" value="${feature.maxTorque}" step="0.1"></div>
                 </div>
@@ -262,7 +264,7 @@ export class AttitudeTab extends FeatureManager {
         // Add CMGs to the UI
         if (this.cmgs.length > 0) {
             const cmgTitle = document.createElement('h3');
-            cmgTitle.textContent = 'Control Moment Gyroscopes (CMGs)';
+            cmgTitle.textContent = 'Control Moment Gyroscope (CMG) System';
             container.appendChild(cmgTitle);
             this.cmgs.forEach((cmg, index) => {
                 container.appendChild(createFeatureElement(cmg, index, 'cmg'));
@@ -271,11 +273,15 @@ export class AttitudeTab extends FeatureManager {
 
         // Add event listeners
         const allInputs = container.querySelectorAll('.attitude-input');
-        allInputs.forEach(input => {
+        console.log('DEBUG: Found inputs to attach listeners to:', allInputs.length);
+        allInputs.forEach((input, i) => {
+            console.log('DEBUG: Input', i, 'type:', input.dataset.type, 'index:', input.dataset.index, 'property:', input.dataset.property);
             input.addEventListener('input', (e) => {
+                console.log('DEBUG: Input event fired! value:', e.target.value);
                 const type = e.target.dataset.type;
                 const index = parseInt(e.target.dataset.index);
                 const property = e.target.dataset.property;
+                console.log('DEBUG: Calling updateFeature with', type, index, property, e.target.value);
                 this.updateFeature(type, index, property, e.target.value);
             });
         });
@@ -296,13 +302,13 @@ export class AttitudeTab extends FeatureManager {
     }
 
     /**
-     * Overrides the parent method to load data for both RWs and CMGs.
+     * Overrides parent method to load data for both RWs and CMGs.
      * @param {object} spacecraftData - The main data object.
      */
     loadFromData(spacecraftData) {
-        this.clearFeatures();
+        console.log('DEBUG: loadFromData called - spacecraftData.cmg:', JSON.stringify(spacecraftData.cmg));
         
-        // Load Reaction Wheels
+        // Load Reaction Wheels - direct assignment to maintain reference
         if (spacecraftData.reactionwheels && spacecraftData.reactionwheels.wheels) {
             this.reactionWheels = spacecraftData.reactionwheels.wheels;
             if (this.reactionWheels.length > 0) {
@@ -315,18 +321,22 @@ export class AttitudeTab extends FeatureManager {
             });
         }
 
-        // Load CMGs
+        // Load CMGs - direct assignment to maintain reference
+        console.log('DEBUG: Loading CMGs from spacecraftData:', JSON.stringify(spacecraftData.cmg));
         if (spacecraftData.cmg && spacecraftData.cmg.cmgs) {
+            // Direct reference assignment - same as reaction wheels
+            console.log('DEBUG: Assigning spacecraftData.cmg.cmgs directly to this.cmgs');
             this.cmgs = spacecraftData.cmg.cmgs;
+            console.log('DEBUG: Copied cmgs to this.cmgs:', JSON.stringify(this.cmgs));
             if (this.cmgs.length > 0) {
                 this.cmgIdCounter = Math.max(...this.cmgs.map(f => f.id || 0)) + 1;
             }
-            this.cmgs.forEach(cmg => {
-                const visual = this.createVisual(cmg, 'cmg');
-                this.cmgVisuals.push(visual);
-                this.scene.add(visual.arrow);
-            });
+        } else {
+            // No CMG data - initialize empty
+            console.log('DEBUG: No CMG data found, initializing empty array');
+            this.cmgs = [];
         }
+        console.log('DEBUG: Finished loading CMGs, this.cmgs length:', this.cmgs.length);
         
         this.updateFeaturesList();
     }
@@ -335,15 +345,20 @@ export class AttitudeTab extends FeatureManager {
      * Clears all features and visuals from the scene and data.
      */
     clearFeatures() {
+        console.log('DEBUG: clearFeatures called - will clear arrays in place');
         // Remove RW visuals
         this.rwVisuals.forEach(visual => this.scene.remove(visual.arrow));
-        this.reactionWheels = [];
         this.rwVisuals = [];
+        
+        // Clear RW array in place (don't replace with new array)
+        this.reactionWheels.length = 0;
         
         // Remove CMG visuals
         this.cmgVisuals.forEach(visual => this.scene.remove(visual.arrow));
-        this.cmgs = [];
         this.cmgVisuals = [];
+        
+        // Clear CMG array in place (don't replace with new array!)
+        this.cmgs.length = 0;
 
         this.updateSpacecraftData();
     }

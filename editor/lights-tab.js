@@ -21,8 +21,8 @@ export class LightsTab extends FeatureManager {
             id: lightId,
             name: `Light ${lightId}`,
             // These are now absolute world coordinates
-            position: { x: 5, y: 5, z: 5 },
-            rotation: { x: -Math.PI / 4, y: 0, z: 0 }, // Default pointing down
+            position: { x: 0, y: 0, z: 0 },
+            rotation: { x: 0, y: Math.PI, z: 0 }, // Default: X=0, Y=180 degrees
             color: '#ffffff',
             intensity: 1,
             distance: 20,

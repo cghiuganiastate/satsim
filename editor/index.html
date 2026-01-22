@@ -90,7 +90,7 @@
             overflow-y: auto;
             box-sizing: border-box;
             transition: transform 0.3s ease;
-            transform: translateX(100%);
+            transform: translateX(0);
             position: absolute;
             right: 0;
             top: 50px; /* Pushes the panel down by 50px */
@@ -99,13 +99,13 @@
             box-shadow: -2px 0 5px rgba(0,0,0,0.1);
         }
         
-        #right-panel.visible {
-            transform: translateX(0);
+        #right-panel.hidden {
+            transform: translateX(100%);
         }
         
         .toggle-panel-btn {
             position: absolute;
-            right: 250px;
+            right: 0;
             top: 50%;
             transform: translateY(-50%);
             background-color: #777;
@@ -118,8 +118,8 @@
             transition: right 0.3s ease;
         }
         
-        .toggle-panel-btn.panel-hidden {
-            right: 0;
+        .toggle-panel-btn.panel-visible {
+            right: 250px;
         }
         
         .tab-content {
@@ -223,10 +223,10 @@
                 <div class="tab" data-tab="lights">Lights</div>
             </div>
             <div class="header-actions">
+                <a href="https://cghiuganiastate.github.io/satsim/" target="_blank" style="color: white; text-decoration: none; margin-right: 10px; font-weight: bold;">🏠 Home</a>
+                <a href="https://github.com/cghiuganiastate/satsim" target="_blank" style="color: white; text-decoration: none; margin-right: 10px; font-weight: bold;">🔗 GitHub</a>
                 <button id="import-config">Import Config</button>
                 <button id="export-config">Export Config</button>
-                <!-- NEW: Bake Config Button -->
-                <button id="bake-config">Bake Config</button>
             </div>
         </div>
         
@@ -284,7 +284,7 @@
                 <!-- Three.js scene will be rendered here -->
             </div>
             
-            <button id="toggle-panel" class="toggle-panel-btn panel-hidden">☰</button>
+            <button id="toggle-panel" class="toggle-panel-btn panel-visible">☰</button>
             <div id="right-panel">
                 <h3>Spacecraft Properties</h3>
                 <div class="control-group">
@@ -307,18 +307,18 @@
                     <label>Max Fuel:</label>
                     <input type="number" id="max-fuel-mass" value="5">
                 </div>
-                <h4>Inertia</h4>
+                <h4>Moment of Inertia</h4>
                 <div class="control-group">
-                    <label>X:</label>
-                    <input type="number" id="inertia-x" value="3">
+                    <label>Ixx:</label>
+                    <input type="number" id="inertia-xx" value="3">
                 </div>
                 <div class="control-group">
-                    <label>Y:</label>
-                    <input type="number" id="inertia-y" value="3">
+                    <label>Iyy:</label>
+                    <input type="number" id="inertia-yy" value="3">
                 </div>
                 <div class="control-group">
-                    <label>Z:</label>
-                    <input type="number" id="inertia-z" value="3">
+                    <label>Izz:</label>
+                    <input type="number" id="inertia-zz" value="3">
                 </div>
             
                 <!-- New Center of Mass Section -->
@@ -338,6 +338,40 @@
                 <div class="control-group">
                     <label>Show CG:</label>
                     <input type="checkbox" id="toggle-cg-visual">
+                </div>
+                
+                <h4>Camera Rotation</h4>
+                <div class="control-group">
+                    <label>Rot X:</label>
+                    <input type="number" id="camera-rot-x" value="0" step="0.1">
+                </div>
+                <div class="control-group">
+                    <label>Rot Y:</label>
+                    <input type="number" id="camera-rot-y" value="3.14159" step="0.1">
+                </div>
+                
+                <h4>Light Position</h4>
+                <div class="control-group">
+                    <label>X:</label>
+                    <input type="number" id="light-pos-x" value="0" step="0.1">
+                </div>
+                <div class="control-group">
+                    <label>Y:</label>
+                    <input type="number" id="light-pos-y" value="0" step="0.1">
+                </div>
+                <div class="control-group">
+                    <label>Z:</label>
+                    <input type="number" id="light-pos-z" value="0" step="0.1">
+                </div>
+                
+                <h4>Model Scale</h4>
+                <div class="control-group">
+                    <label>Enable Scale:</label>
+                    <input type="checkbox" id="enable-scale" checked>
+                </div>
+                <div class="control-group">
+                    <label>Scale:</label>
+                    <input type="number" id="model-scale" value="0.001" step="0.0001" min="0.0001">
                 </div>
                 
                 <button id="import-model">Import Model</button>

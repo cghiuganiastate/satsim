@@ -71,17 +71,28 @@ function initSimulation() {
   let fineControlMode = false;
   let fineControlKeys = {};
   let fineControlProcessedKeys = {};
+  let fineControlKeyStartTimes = {};
+  let timedFiringEnabled = false;
+  let firingDuration = 0.1;
+  let torquePercentage = 50; // Percentage of max torque to use (1-100)
   
   let initialPosition = new CANNON.Vec3(0, -3, 5.5);
   let initialOrientation = new CANNON.Quaternion();
   initialOrientation.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), -Math.PI/2);
   let initialOrientationThree = new THREE.Quaternion();
   initialOrientationThree.setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI/2);
-  let isDocked = false;
+  let isDocked = true; // Start docked
   let canDock = false;
   let hasLeftDockingBoxOnce = false;
-  const DOCKING_BOX_SIZE = 0.1;
-  const DOCKING_ANGLE_THRESHOLD = 3;
+  
+  // Clock variables for tracking time since undock
+  let undockTime = null; // Timestamp when undocked
+  let clockDisplay = null; // Reference to clock display element
+  let pausedStartTime = null; // Timestamp when pause started
+  let accumulatedPausedTime = 0; // Total time spent paused since undock
+  let lastDockedTime = 0; // Time elapsed when last docked
+  let DOCKING_BOX_SIZE = 0.1;
+  let DOCKING_ANGLE_THRESHOLD = 3;
   const MAX_ANGULAR_SPEED = 1.0;
   const MAX_XZ_SPEED = 0.1;
   const MAX_Z_SPEED = 1.0;
@@ -90,11 +101,35 @@ function initSimulation() {
   window.world = world;
   window.renderer = renderer;
 
+  // Helper function to normalize configuration to unified format
+  function normalizeConfiguration(config) {
+    const normalized = {
+      spacecraftProperties: config.spacecraftProperties || { dryMass: 5, fuelMass: 5, maxFuelMass: 5, inertia: { x: 3, y: 3, z: 3 } },
+      cameras: Array.isArray(config.cameras) ? config.cameras : (config.cameras?.cameras || []),
+      cmg: { cmgs: Array.isArray(config.cmg) ? config.cmg : (config.cmg?.cmgs || []) },
+      lamps: { lamps: Array.isArray(config.lamps) ? config.lamps : (config.lamps?.lamps || []) },
+      reactionwheels: { wheels: Array.isArray(config.reactionwheels) ? config.reactionwheels : (config.reactionwheels?.wheels || []) },
+      thrusters: { thrusters: Array.isArray(config.thrusters) ? config.thrusters : (config.thrusters?.thrusters || []) }
+    };
+    
+    // Handle CMG format: if config.cmg has a 'cmg' property (single CMG object), convert to cmgs array
+    if (config.cmg && config.cmg.cmg) {
+      normalized.cmg = { cmgs: [config.cmg.cmg] };
+    }
+    
+    // Preserve model data if present (for editor compatibility)
+    if (config.model) {
+      normalized.model = config.model;
+    }
+    
+    return normalized;
+  }
+
   // Helper function to get configuration from uploaded files or defaults
   async function getConfiguration() {
     if (window.uploadedFiles && window.uploadedFiles.config) {
       console.log('Using uploaded configuration');
-      return window.uploadedFiles.config;
+      return normalizeConfiguration(window.uploadedFiles.config);
     }
     
     // Load default configuration if no uploaded config
@@ -105,14 +140,14 @@ function initSimulation() {
       }
       const data = await response.json();
       console.log('Using default configuration');
-      return data;
+      return normalizeConfiguration(data);
     } catch (error) {
       console.error('Error loading default configuration:', error);
       // Return minimal default configuration
       return {
-        cameras: { cameras: [] },
+        cameras: [],
         cmg: { cmgs: [] },
-        spacecraftProperties: { dryMass: 5, fuelMass: 5, maxFuelMass: 5 },
+        spacecraftProperties: { dryMass: 5, fuelMass: 5, maxFuelMass: 5, inertia: { x: 3, y: 3, z: 3 } },
         lamps: { lamps: [] },
         reactionwheels: { wheels: [] },
         thrusters: { thrusters: [] }
@@ -150,6 +185,28 @@ function initSimulation() {
     // DEBUG: Log the loaded configuration
     console.log("DEBUG: Configuration loaded:", config);
 
+    // Load initial position/orientation from uploaded file if available
+    if (window.uploadedFiles && window.uploadedFiles.initialPosition) {
+      const posData = window.uploadedFiles.initialPosition;
+      initialPosition = new CANNON.Vec3(posData.position.x, posData.position.y, posData.position.z);
+      initialOrientation = new CANNON.Quaternion(posData.orientation.x, posData.orientation.y, posData.orientation.z, posData.orientation.w);
+      initialOrientationThree = new THREE.Quaternion(posData.orientation.x, posData.orientation.y, posData.orientation.z, posData.orientation.w);
+      
+      // Load docking parameters if available in the file
+      if (posData.dockingBoxSize !== undefined) {
+        DOCKING_BOX_SIZE = posData.dockingBoxSize;
+        console.log("Using imported docking box size:", DOCKING_BOX_SIZE);
+      }
+      if (posData.dockingAngleThreshold !== undefined) {
+        DOCKING_ANGLE_THRESHOLD = posData.dockingAngleThreshold;
+        console.log("Using imported docking angle threshold:", DOCKING_ANGLE_THRESHOLD);
+      }
+      
+      console.log("Using imported initial position/orientation:", posData);
+    } else {
+      console.log("Using default initial position/orientation");
+    }
+
     const rotation = { x: 0, y: 0, z: 0 };
     const centroidModel = true;
 
@@ -171,6 +228,10 @@ function initSimulation() {
       satBody.quaternion.copy(initialOrientation);
       satMesh.position.copy(initialPosition);
       satMesh.quaternion.copy(initialOrientation);
+      
+      // Ensure velocity and angular velocity are zero at start
+      satBody.velocity.set(0, 0, 0);
+      satBody.angularVelocity.set(0, 0, 0);
 
       camSys = new CameraSystem(renderer, satMesh);
       window.camSys = camSys;
@@ -322,6 +383,10 @@ function createDockingPort(geometry) {
       if (!fineControlProcessedKeys[k]) {
         fineControlKeys[k] = true;
         fineControlProcessedKeys[k] = true;
+        // Record the start time for timed firing
+        if (timedFiringEnabled && !fineControlKeyStartTimes[k]) {
+          fineControlKeyStartTimes[k] = performance.now();
+        }
       }
     } else {
       keys[k] = true;
@@ -330,11 +395,52 @@ function createDockingPort(geometry) {
     if (backtickPressed && k === 'r') resetSimulation();
     if (backtickPressed && k === 'p') {
       if (isDocked && paused) {
+        // Undocking: record the time when we start
         isDocked = false;
         hasLeftDockingBoxOnce = true;
         canDock = false;
         updateUIText('docking-status', 'NOT DOCKED');
+        // Record undock time when unpausing from docked state
+        undockTime = performance.now();
+        accumulatedPausedTime = 0; // Reset paused time when undocking
       }
+      
+      if (paused) {
+        // Unpausing: accumulate the time we were paused
+        if (pausedStartTime !== null) {
+          accumulatedPausedTime += (performance.now() - pausedStartTime);
+          pausedStartTime = null;
+        }
+      } else {
+        // Pausing: record when we paused
+        pausedStartTime = performance.now();
+      }
+      
+      paused = !paused;
+    }
+    if (backtickPressed && k === 'f') {
+      if (isDocked && paused) {
+        // Undocking: record the time when we start
+        isDocked = false;
+        hasLeftDockingBoxOnce = true;
+        canDock = false;
+        updateUIText('docking-status', 'NOT DOCKED');
+        // Record undock time when unpausing from docked state
+        undockTime = performance.now();
+        accumulatedPausedTime = 0; // Reset paused time when undocking
+      }
+      
+      if (paused) {
+        // Unpausing: accumulate the time we were paused
+        if (pausedStartTime !== null) {
+          accumulatedPausedTime += (performance.now() - pausedStartTime);
+          pausedStartTime = null;
+        }
+      } else {
+        // Pausing: record when we paused
+        pausedStartTime = performance.now();
+      }
+      
       paused = !paused;
     }
     if (backtickPressed && k === 'h') {
@@ -399,7 +505,7 @@ function createDockingPort(geometry) {
       }
     });
   }
-  let paused = false;
+  let paused = true; // Start paused so spacecraft stays docked
 
   function resetSimulation(){
     if (!satBody || !satMesh) return;
@@ -419,7 +525,7 @@ function createDockingPort(geometry) {
       toggleUIVisibility('reaction-wheel-status', false);
       toggleUIVisibility('cmg-status', false);
       attitudeControl.reactionWheels.forEach(wheel => wheel.currentAngularMomentum = 0);
-      attitudeControl.cmgs.forEach(cmg => cmg.gimbalAngle = 0);
+      attitudeControl.cmgs.forEach(cmg => cmg.currentAngularMomentum.set(0, 0, 0));
     }
     
     if (lampManager) {
@@ -435,10 +541,18 @@ function createDockingPort(geometry) {
       t.material.emissive.setHex(0x000000);
     });
     
-    isDocked = false;
+    // Reset clock when simulation is reset - reset to docked state
+    isDocked = true;
+    paused = true;
     canDock = false;
     hasLeftDockingBoxOnce = false;
-    updateUIText('docking-status', 'NOT DOCKED');
+    undockTime = null;
+    pausedStartTime = null;
+    accumulatedPausedTime = 0;
+    updateUIText('docking-status', 'DOCKED');
+    if (clockDisplay) {
+      clockDisplay.textContent = '0:00:00.000';
+    }
   }
 
   // Original docking logic - unchanged
@@ -471,8 +585,92 @@ function createDockingPort(geometry) {
     return { inBox, inAngle, withinSpeedLimits, withinAngularSpeedLimit, angleDiff, distance, speed, angularSpeed };
   }
 
+  // Function to update the clock display
+  function updateClock() {
+    if (!clockDisplay) {
+      clockDisplay = document.getElementById('clock-display');
+      if (!clockDisplay) return;
+    }
+    
+    // If never undocked, show 0:00:00.000
+    if (undockTime === null) {
+      clockDisplay.textContent = '0:00:00.000';
+      return;
+    }
+    
+    // If docked, show the time at which we docked (paused)
+    if (isDocked) {
+      const elapsedSeconds = lastDockedTime / 1000;
+      const hours = Math.floor(elapsedSeconds / 3600);
+      const minutes = Math.floor((elapsedSeconds % 3600) / 60);
+      const seconds = Math.floor(elapsedSeconds % 60);
+      const milliseconds = Math.floor(lastDockedTime % 1000);
+      const hoursStr = hours.toString();
+      const minutesStr = minutes.toString().padStart(2, '0');
+      const secondsStr = seconds.toString().padStart(2, '0');
+      const millisecondsStr = milliseconds.toString().padStart(3, '0');
+      clockDisplay.textContent = `${hoursStr}:${minutesStr}:${secondsStr}.${millisecondsStr}`;
+      return;
+    }
+    
+    // Calculate elapsed time since undock, accounting for paused time
+    let currentTime = performance.now();
+    
+    // If currently paused, subtract the current pause duration from the calculation
+    if (paused && pausedStartTime !== null) {
+      currentTime = pausedStartTime;
+    }
+    
+    const elapsedMilliseconds = currentTime - undockTime - accumulatedPausedTime;
+    const elapsedSeconds = elapsedMilliseconds / 1000;
+    
+    // Calculate hours, minutes, seconds, and milliseconds
+    const hours = Math.floor(elapsedSeconds / 3600);
+    const minutes = Math.floor((elapsedSeconds % 3600) / 60);
+    const seconds = Math.floor(elapsedSeconds % 60);
+    const milliseconds = Math.floor(elapsedMilliseconds % 1000);
+    
+    // Format as H:MM:SS.mmm
+    const hoursStr = hours.toString();
+    const minutesStr = minutes.toString().padStart(2, '0');
+    const secondsStr = seconds.toString().padStart(2, '0');
+    const millisecondsStr = milliseconds.toString().padStart(3, '0');
+    
+    clockDisplay.textContent = `${hoursStr}:${minutesStr}:${secondsStr}.${millisecondsStr}`;
+  }
+
   async function main(config) {
     initializeUI();
+    
+    // Set up event listeners for timed firing controls and torque slider
+    const timedFiringToggle = document.getElementById('timed-firing-toggle');
+    const firingDurationSlider = document.getElementById('firing-duration-slider');
+    const firingDurationValue = document.getElementById('firing-duration-value');
+    const torqueSlider = document.getElementById('torque-slider');
+    const torqueValue = document.getElementById('torque-value');
+    
+    if (timedFiringToggle) {
+      timedFiringToggle.addEventListener('change', (e) => {
+        timedFiringEnabled = e.target.checked;
+        // Clear key start times when toggling
+        fineControlKeyStartTimes = {};
+      });
+    }
+    
+    if (firingDurationSlider && firingDurationValue) {
+      firingDurationSlider.addEventListener('input', (e) => {
+        firingDuration = parseFloat(e.target.value);
+        firingDurationValue.textContent = firingDuration.toFixed(2);
+      });
+    }
+    
+    // Torque slider event listener
+    if (torqueSlider && torqueValue) {
+      torqueSlider.addEventListener('input', (e) => {
+        torquePercentage = parseInt(e.target.value);
+        torqueValue.textContent = torquePercentage;
+      });
+    }
     
     try {
       // Initialize all systems with the combined configuration
@@ -514,6 +712,18 @@ function createDockingPort(geometry) {
     const dt = clock.getDelta();
     const currentTime = performance.now();
     
+    // Handle timed firing: check if any keys have exceeded their firing duration
+    if (fineControlMode && timedFiringEnabled) {
+      Object.entries(fineControlKeyStartTimes).forEach(([key, startTime]) => {
+        const elapsed = (currentTime - startTime) / 1000; // Convert to seconds
+        if (elapsed >= firingDuration) {
+          // Remove from fineControlKeys to stop firing
+          delete fineControlKeys[key];
+          delete fineControlKeyStartTimes[key];
+        }
+      });
+    }
+    
     // DEBUG: Print inertia matrix every 10 seconds
     if (satBody && currentTime - lastInertiaDebugTime > INERTIA_DEBUG_INTERVAL) {
       console.log("DEBUG: Inertia Matrix (10s interval):", {
@@ -528,20 +738,41 @@ function createDockingPort(geometry) {
     if (!paused && satBody){
       if (attitudeControl && attitudeControl.loaded && attitudeControl.mode !== 'thrusters') {
         const torque = new CANNON.Vec3(0, 0, 0);
+        const isCMGMode = attitudeControl.mode === 'cmgs';
+        
+        // Get max torque from the active attitude control system
+        let maxTorque = 0.5; // Default fallback
+        if (isCMGMode && attitudeControl.cmgs.length > 0) {
+          // Use average max torque from all CMGs
+          maxTorque = attitudeControl.cmgs.reduce((sum, cmg) => sum + cmg.maxTorque, 0) / attitudeControl.cmgs.length;
+        } else if (!isCMGMode && attitudeControl.reactionWheels.length > 0) {
+          // Use average max torque from all reaction wheels
+          maxTorque = attitudeControl.reactionWheels.reduce((sum, wheel) => sum + wheel.maxTorque, 0) / attitudeControl.reactionWheels.length;
+        }
+        
+        // Calculate torque per axis based on percentage
+        const torquePerAxis = maxTorque * (torquePercentage / 100);
+        
         if (fineControlMode) {
-          if (fineControlKeys['i']) torque.x += 0.5;
-          if (fineControlKeys['k']) torque.x -= 0.5;
-          if (fineControlKeys['l']) torque.y += 0.5;
-          if (fineControlKeys['j']) torque.y -= 0.5;
-          if (fineControlKeys['u']) torque.z += 0.5;
-          if (fineControlKeys['o']) torque.z -= 0.5;
+          // Swap I and K for CMGs
+          if (isCMGMode ? fineControlKeys['k'] : fineControlKeys['i']) torque.x += torquePerAxis;
+          if (isCMGMode ? fineControlKeys['i'] : fineControlKeys['k']) torque.x -= torquePerAxis;
+          // Swap J and L for CMGs
+          if (isCMGMode ? fineControlKeys['j'] : fineControlKeys['l']) torque.y += torquePerAxis;
+          if (isCMGMode ? fineControlKeys['l'] : fineControlKeys['j']) torque.y -= torquePerAxis;
+          // Swap U and O for CMGs
+          if (isCMGMode ? fineControlKeys['o'] : fineControlKeys['u']) torque.z += torquePerAxis;
+          if (isCMGMode ? fineControlKeys['u'] : fineControlKeys['o']) torque.z -= torquePerAxis;
         } else {
-          if (keys['i']) torque.x += 0.5;
-          if (keys['k']) torque.x -= 0.5;
-          if (keys['l']) torque.y += 0.5;
-          if (keys['j']) torque.y -= 0.5;
-          if (keys['u']) torque.z += 0.5;
-          if (keys['o']) torque.z -= 0.5;
+          // Swap I and K for CMGs
+          if (isCMGMode ? keys['k'] : keys['i']) torque.x += torquePerAxis;
+          if (isCMGMode ? keys['i'] : keys['k']) torque.x -= torquePerAxis;
+          // Swap J and L for CMGs
+          if (isCMGMode ? keys['j'] : keys['l']) torque.y += torquePerAxis;
+          if (isCMGMode ? keys['l'] : keys['j']) torque.y -= torquePerAxis;
+          // Swap U and O for CMGs
+          if (isCMGMode ? keys['o'] : keys['u']) torque.z += torquePerAxis;
+          if (isCMGMode ? keys['u'] : keys['o']) torque.z -= torquePerAxis;
         }
         if (torque.length() > 0) attitudeControl.applyControlTorque(torque);
         if (attitudeControl.desaturationActive) attitudeControl.desaturateWithThrusters(thrusters, keyToThrusterIndices);
@@ -619,7 +850,11 @@ function createDockingPort(geometry) {
       }
     });
 
-    fineControlKeys = {};
+    // Only clear fineControlKeys if timed firing is NOT enabled
+    // When timed firing is enabled, keys are cleared by the duration check logic
+    if (!timedFiringEnabled) {
+      fineControlKeys = {};
+    }
 
     // Original docking logic - unchanged
     const dockingStatus = isInDockingZone();
@@ -635,6 +870,12 @@ function createDockingPort(geometry) {
       updateUIText('docking-status', 'DOCKED');
       satBody.velocity.set(0, 0, 0);
       satBody.angularVelocity.set(0, 0, 0);
+      // Record the time elapsed when we dock
+      let currentTime = performance.now();
+      if (pausedStartTime !== null) {
+        currentTime = pausedStartTime;
+      }
+      lastDockedTime = currentTime - undockTime - accumulatedPausedTime;
     }
     if (!canDock && !dockingStatus.inBox && hasLeftDockingBoxOnce) {
       canDock = true;
@@ -661,12 +902,56 @@ function createDockingPort(geometry) {
       dockingStatus
     });
     
+    // Update clock display
+    updateClock();
+    
     renderer.render(scene, camSys.getCamera());
   }
 
   window.addEventListener('resize', ()=>{
     renderer.setSize(window.innerWidth, window.innerHeight);
     camSys.handleResize();
+  });
+
+  // Export current position and orientation to JSON file
+  window.addEventListener('exportPosition', () => {
+    if (!satBody) {
+      console.error('Spacecraft body not available for export');
+      alert('Spacecraft not loaded yet');
+      return;
+    }
+
+    const positionData = {
+      position: {
+        x: satBody.position.x,
+        y: satBody.position.y,
+        z: satBody.position.z
+      },
+      orientation: {
+        x: satBody.quaternion.x,
+        y: satBody.quaternion.y,
+        z: satBody.quaternion.z,
+        w: satBody.quaternion.w
+      },
+      dockingBoxSize: DOCKING_BOX_SIZE,
+      dockingAngleThreshold: DOCKING_ANGLE_THRESHOLD
+    };
+
+    // Create a blob and download the file
+    const dataStr = JSON.stringify(positionData, null, 2);
+    const blob = new Blob([dataStr], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'spacecraft_position.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    
+    console.log('Exported position/orientation:', positionData);
+    alert('Position and orientation exported to spacecraft_position.json');
   });
 
   initializeDefaultSpacecraft();

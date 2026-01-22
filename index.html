@@ -116,13 +116,74 @@
     }
     
     /* Simulation UI Styles */
-    #status-panel { position: absolute; left: 10px; top: 10px; background: rgba(0,0,0,0.7); color: #0f0; padding: 10px; border-radius: 5px; font-size: 12px; width: 260px; }
+    #status-panel { position: absolute; left: 10px; top: 10px; background: rgba(0,0,0,0.7); color: #0f0; padding: 10px; border-radius: 5px; font-size: 12px; width: 400px; }
     #controls { position: absolute; bottom: 10px; left: 10px; background: rgba(0,0,0,0.7); color: #fff; padding: 10px; border-radius: 5px; font-size: 12px; }
     #hull-info { position: absolute; right: 10px; top: 10px; background: rgba(0,0,0,0.7); color: #0f0; padding: 10px; border-radius: 5px; font-size: 12px; width: 200px; }
     #distance-info { position: absolute; left: 10px; top: 520px; background: rgba(0,0,0,0.7); color: #0ff; padding: 10px; border-radius: 5px; font-size: 12px; width: 260px; display: none; }
     .fuel-bar-container { width: 100%; height: 20px; background-color: #333; border-radius: 5px; margin-top: 5px; }
     .fuel-bar { height: 100%; background-color: #0f0; border-radius: 5px; transition: width 0.3s; }
+    .momentum-bar-container { width: 100%; height: 12px; background-color: #333; border-radius: 3px; margin-top: 2px; }
+    .momentum-bar { height: 100%; background-color: #0f0; border-radius: 3px; transition: width 0.3s, background-color 0.3s; }
     .status-section { margin-bottom: 10px; }
+    
+    /* 8-Segment Clock Styles */
+    #clock-display {
+      position: absolute;
+      top: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0, 0, 0, 0.8);
+      color: #ff3333;
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 48px;
+      font-weight: bold;
+      padding: 10px 20px;
+      border-radius: 5px;
+      border: 2px solid #ff3333;
+      text-shadow: 0 0 10px #ff3333, 0 0 20px #ff3333;
+      letter-spacing: 5px;
+      z-index: 100;
+      min-width: 200px;
+      text-align: center;
+    }
+    
+    .clock-colon {
+      animation: blink 1s infinite;
+    }
+    
+    @keyframes blink {
+      0%, 50% { opacity: 1; }
+      51%, 100% { opacity: 0.3; }
+    }
+    
+    /* Paused Overlay Styles */
+    #paused-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: none;
+      justify-content: center;
+      align-items: center;
+      flex-direction: column;
+      z-index: 999;
+      pointer-events: none;
+    }
+    
+    #paused-text {
+      font-size: 120px;
+      font-weight: bold;
+      color: #ff0000;
+      font-family: 'Courier New', Courier, monospace;
+    }
+    
+    #paused-instructions {
+      margin-top: 30px;
+      font-size: 24px;
+      color: #ffffff;
+      font-family: 'Courier New', Courier, monospace;
+    }
     .status-section:last-child { margin-bottom: 0; }
     canvas { display: block; }
   </style>
@@ -132,6 +193,13 @@
   <div id="file-upload-menu">
     <div class="menu-container">
       <h2 class="menu-header">6DOF Satellite Simulator - Configuration</h2>
+      
+      <!-- Navigation Links -->
+      <div style="text-align: center; margin-bottom: 15px;">
+        <a href="https://cghiuganiastate.github.io/satsim/editor/" target="_blank" style="color: #0f0; text-decoration: none; margin: 0 15px; font-weight: bold;">📝 Editor</a>
+        <a href="https://github.com/cghiuganiastate/satsim" target="_blank" style="color: #0f0; text-decoration: none; margin: 0 15px; font-weight: bold;">🔗 GitHub</a>
+      </div>
+      
       <p style="text-align: center; margin-bottom: 20px;">
         Upload custom configuration files or use defaults to start the simulation
       </p>
@@ -169,6 +237,17 @@
         </div>
       </div>
       
+      <div class="file-upload-section">
+        <div class="section-title">Initial Position & Orientation</div>
+        <div class="file-upload-grid">
+          <div class="file-upload-item">
+            <label for="position-file">Initial Position (.json)</label>
+            <input type="file" id="position-file" accept=".json">
+            <div class="file-status" id="position-status">No file selected (will use defaults)</div>
+          </div>
+        </div>
+      </div>
+      
       <div class="menu-buttons">
         <button id="use-defaults-button" class="menu-button">Use Defaults</button>
         <button id="start-simulation-button" class="menu-button start-button">Start Simulation</button>
@@ -176,8 +255,15 @@
     </div>
   </div>
 
+  <!-- Paused Overlay -->
+  <div id="paused-overlay">
+    <div id="paused-text">PAUSED</div>
+    <div id="paused-instructions">Press "`+P" to unpause</div>
+  </div>
+
   <!-- Simulation UI (Initially Hidden) -->
   <div id="simulation-container" style="display: none;">
+    <div id="clock-display">0:00:00</div>
     <div id="status-panel">
       <div class="status-section">
         <div>Position: <span id="position-info">X: 0.00 Y: 0.00 Z: 0.00</span></div>
@@ -187,6 +273,18 @@
         <div>Status: <span id="status-info">RUNNING</span></div>
         <div>Camera Mode: <span id="camera-mode-info">Unknown</span></div>
         <div>Fine Control: <span id="fine-control-info">OFF</span></div>
+        <div style="margin-top: 5px;">
+          <input type="checkbox" id="timed-firing-toggle">
+          <label for="timed-firing-toggle">Timed Firing</label>
+        </div>
+        <div style="margin-top: 5px;">
+          <label for="firing-duration-slider">Duration: <span id="firing-duration-value">0.1</span>s</label><br>
+          <input type="range" id="firing-duration-slider" min="0.05" max="2.0" step="0.05" value="0.1" style="width: 100%;">
+        </div>
+        <div style="margin-top: 5px; border-top: 1px solid #333; padding-top: 5px;">
+          <label for="torque-slider">Torque Strength: <span id="torque-value">50</span>%</label><br>
+          <input type="range" id="torque-slider" min="1" max="100" step="1" value="50" style="width: 100%;">
+        </div>
       </div>
       
       <div class="status-section">
@@ -224,7 +322,11 @@
       </div>
       
       <div class="status-section">
-        <div>Docking Status: <span id="docking-status">NOT DOCKED</span></div>
+        <button id="export-position-button" class="menu-button" style="width: 100%; padding: 5px; font-size: 11px;">Export Current Position & Orientation</button>
+      </div>
+      
+      <div class="status-section">
+        <div>Docking Status: <span id="docking-status" style="color: #0ff;">DOCKED</span></div>
         <div>Distance to Dock: <span id="dock-distance">--</span> m</div>
         <div>Angular Difference: <span id="angular-diff">--</span>°</div>
         <div>Speed: <span id="docking-speed">--</span> m/s</div>
@@ -243,7 +345,7 @@
       <strong>Attitude Control:</strong> T: Toggle Control Mode(RCS/RW/CMG)<br>
       <strong>Lights and Camera:</strong> V: Toggle Lights | C: Switch Camera<br>
       <strong>State:</strong> `+R: Reset | `+P: Pause/Unpause | Space: Stop Movement and Rotation<br>
-      <strong>Fine Control:</strong> Caps Lock: Single-frame thruster pulses
+      <strong>Fine Control:</strong> Caps Lock: Single-frame & timed thruster pulses
     </div>
     <div id="hull-info">
       <div id="hull-status">Loading Navion...</div>
@@ -281,21 +383,24 @@
     const uploadedFiles = {
       config: null,
       spacecraftModel: null,
-      dockingPort: null
+      dockingPort: null,
+      initialPosition: null
     };
     
     // File input elements
     const fileInputs = {
       config: document.getElementById('config-file'),
       spacecraftModel: document.getElementById('spacecraft-model-file'),
-      dockingPort: document.getElementById('docking-port-file')
+      dockingPort: document.getElementById('docking-port-file'),
+      initialPosition: document.getElementById('position-file')
     };
     
     // Status elements
     const statusElements = {
       config: document.getElementById('config-status'),
       spacecraftModel: document.getElementById('spacecraft-model-status'),
-      dockingPort: document.getElementById('docking-port-status')
+      dockingPort: document.getElementById('docking-port-status'),
+      initialPosition: document.getElementById('position-status')
     };
     
     // Add event listeners to file inputs
@@ -363,7 +468,50 @@
       }
     });
     
-    // Function to validate combined configuration
+    fileInputs.initialPosition.addEventListener('change', (event) => {
+      const file = event.target.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          try {
+            const content = JSON.parse(e.target.result);
+            // Validate the position data structure
+            if (validatePositionData(content)) {
+              uploadedFiles.initialPosition = content;
+              statusElements.initialPosition.textContent = `Loaded: ${file.name}`;
+              statusElements.initialPosition.style.color = '#0f0';
+            } else {
+              statusElements.initialPosition.textContent = `Invalid position format`;
+              statusElements.initialPosition.style.color = '#f00';
+            }
+          } catch (error) {
+            statusElements.initialPosition.textContent = `Error parsing ${file.name}: ${error.message}`;
+            statusElements.initialPosition.style.color = '#f00';
+            console.error(`Error parsing ${file.name}:`, error);
+          }
+        };
+        reader.readAsText(file);
+      } else {
+        uploadedFiles.initialPosition = null;
+        statusElements.initialPosition.textContent = 'No file selected (will use defaults)';
+        statusElements.initialPosition.style.color = '#0ff';
+      }
+    });
+    
+    // Function to validate position data
+    function validatePositionData(content) {
+      // Check for required fields
+      if (typeof content?.position?.x !== 'number') return false;
+      if (typeof content?.position?.y !== 'number') return false;
+      if (typeof content?.position?.z !== 'number') return false;
+      if (typeof content?.orientation?.x !== 'number') return false;
+      if (typeof content?.orientation?.y !== 'number') return false;
+      if (typeof content?.orientation?.z !== 'number') return false;
+      if (typeof content?.orientation?.w !== 'number') return false;
+      return true;
+    }
+    
+    // Function to validate combined configuration (accepts both unified and baked formats)
     function validateCombinedConfig(content) {
       // Check for required sections
       const requiredSections = ['cameras', 'cmg', 'spacecraftProperties', 'lamps', 'reactionwheels', 'thrusters'];
@@ -374,13 +522,27 @@
         }
       }
       
-      // Validate each section
-      if (!Array.isArray(content.cameras)) return false;
-      if (!Array.isArray(content.cmg?.cmgs)) return false;
+      // Validate cameras: accepts either direct array or nested object
+      if (!Array.isArray(content.cameras) && !Array.isArray(content.cameras?.cameras)) return false;
+      
+      // Validate CMG: accepts either array or nested object
+      const cmgData = Array.isArray(content.cmg) ? { cmgs: content.cmg } : content.cmg;
+      if (typeof cmgData?.cmgs !== 'object' && !Array.isArray(cmgData?.cmgs)) return false;
+      
+      // Validate spacecraft properties
       if (typeof content.spacecraftProperties?.dryMass !== 'number') return false;
-      if (!Array.isArray(content.lamps?.lamps)) return false;
-      if (!Array.isArray(content.reactionwheels?.wheels)) return false;
-      if (!Array.isArray(content.thrusters?.thrusters)) return false;
+      
+      // Validate lamps: accepts either direct array or nested object
+      const lampsData = Array.isArray(content.lamps) ? { lamps: content.lamps } : content.lamps;
+      if (!Array.isArray(lampsData?.lamps)) return false;
+      
+      // Validate reaction wheels: accepts either direct array or nested object
+      const rwData = Array.isArray(content.reactionwheels) ? { wheels: content.reactionwheels } : content.reactionwheels;
+      if (!Array.isArray(rwData?.wheels)) return false;
+      
+      // Validate thrusters: accepts either direct array or nested object
+      const thrustersData = Array.isArray(content.thrusters) ? { thrusters: content.thrusters } : content.thrusters;
+      if (!Array.isArray(thrustersData?.thrusters)) return false;
       
       return true;
     }
@@ -391,15 +553,19 @@
       uploadedFiles.config = null;
       uploadedFiles.spacecraftModel = null;
       uploadedFiles.dockingPort = null;
+      uploadedFiles.initialPosition = null;
       fileInputs.config.value = '';
       fileInputs.spacecraftModel.value = '';
       fileInputs.dockingPort.value = '';
+      fileInputs.initialPosition.value = '';
       statusElements.config.textContent = 'No file selected';
       statusElements.config.style.color = '#0ff';
       statusElements.spacecraftModel.textContent = 'No file selected';
       statusElements.spacecraftModel.style.color = '#0ff';
       statusElements.dockingPort.textContent = 'No file selected';
       statusElements.dockingPort.style.color = '#0ff';
+      statusElements.initialPosition.textContent = 'No file selected (will use defaults)';
+      statusElements.initialPosition.style.color = '#0ff';
     });
     
     // Start simulation button
@@ -413,7 +579,21 @@
       
       // Dispatch a custom event to signal that simulation should start
       window.dispatchEvent(new CustomEvent('startSimulation'));
+      
+      // Set up export button functionality
+      setupExportButton();
     });
+    
+    // Function to set up the export button
+    function setupExportButton() {
+      const exportButton = document.getElementById('export-position-button');
+      if (exportButton) {
+        exportButton.addEventListener('click', () => {
+          // Request the simulation to export current position/orientation
+          window.dispatchEvent(new CustomEvent('exportPosition'));
+        });
+      }
+    }
   </script>
   
   <!-- Simulation script (initially waits for the start event) -->

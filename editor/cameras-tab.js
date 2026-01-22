@@ -16,7 +16,7 @@ export class CamerasTab extends FeatureManager {
             id: cameraId,
             name: `Camera ${cameraId}`,
             position: { x: 0, y: 0, z: 0 },
-            rotation: { x: 0, y: 0, z: 0 }, // In radians
+            rotation: { x: 0, y: Math.PI, z: 0 }, // Default: X=0, Y=180 degrees
             fov: 75 // Field of View in degrees
         };
         

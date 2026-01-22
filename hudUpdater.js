@@ -94,6 +94,9 @@ export function updateUI(params) {
     dockingStatus
   } = params;
   
+  // Update paused overlay
+  togglePausedOverlay(isPaused);
+  
   // Update the unified HUD
   updateUnifiedHUD(satBody, isPaused, cameraSystem, fineControlMode, isDocked);
   
@@ -254,12 +257,16 @@ function updateAttitudeControlStatus(attitudeControl) {
       cmgDiv.style.fontSize = '9px';
       cmgDiv.style.marginTop = '2px';
       
-      const color = cmg.nearSingularity ? '#f00' : '#0f0';
+      const color = cmg.percentage > 80 ? '#f00' : 
+                   cmg.percentage > 50 ? '#ff0' : '#0f0';
       
       cmgDiv.innerHTML = `
-        <div style="color: ${color}">${cmg.name}: ${cmg.gimbalAngle}°</div>
-        <div style="font-size: 8px;">
-          ${cmg.nearSingularity ? 'Near Singularity!' : 'Normal'}
+        <div>${cmg.name}: ${cmg.percentage}%</div>
+        <div class="momentum-bar-container">
+          <div class="momentum-bar" style="width: ${cmg.percentage}%; background-color: ${color}"></div>
+        </div>
+        <div style="font-size: 8px; margin-top: 1px;">
+          H: X:${cmg.momentumX?.toFixed(1) || 0} Y:${cmg.momentumY?.toFixed(1) || 0} Z:${cmg.momentumZ?.toFixed(1) || 0}
         </div>
       `;
       
@@ -365,7 +372,7 @@ function calculateDistancesToWalls(station, satMesh, raycaster, maxDistance) {
       // Update the UI
       if (uiElements.distElements[axis.name]) {
         uiElements.distElements[axis.name].textContent = 
-          distance < maxDistance ? distance.toFixed(2) + ' units' : '--';
+          distance < maxDistance ? distance.toFixed(2) + ' m' : '--';
       }
     } else {
       // No intersection within max distance
@@ -374,6 +381,14 @@ function calculateDistancesToWalls(station, satMesh, raycaster, maxDistance) {
       }
     }
   });
+}
+
+// Toggle paused overlay visibility
+function togglePausedOverlay(isPaused) {
+  const overlay = document.getElementById('paused-overlay');
+  if (overlay) {
+    overlay.style.display = isPaused ? 'flex' : 'none';
+  }
 }
 
 // Export a single function to toggle UI visibility

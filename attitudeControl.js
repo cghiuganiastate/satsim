@@ -106,31 +106,23 @@ class AttitudeControlSystem {
     }
 
     processCMGsConfig(data) {
-        data.cmgs.forEach((cmgConfig, index) => {
+        // Check if CMG configuration exists
+        // data can be either { cmgs: [...] } or { cmg: { cmgs: [...] } }
+        const cmgsArray = data.cmgs || (data.cmg && data.cmg.cmgs);
+        
+        if (!cmgsArray || cmgsArray.length === 0) {
+            console.log('No CMG configuration found, CMG system not initialized');
+            return;
+        }
+        
+        // New CMG format: array of CMGs, each with its own properties
+        cmgsArray.forEach((cmgConfig, index) => {
             const cmg = {
                 index: index,
                 name: cmgConfig.name || `CMG${index}`,
-                gimbalOrientation: new CANNON.Vec3(
-                    cmgConfig.gimbalOrientation.x ?? 0,
-                    cmgConfig.gimbalOrientation.y ?? 0,
-                    cmgConfig.gimbalOrientation.z ?? 1
-                ).unit(),
-                wheelOrientation: new CANNON.Vec3(
-                    cmgConfig.wheelOrientation.x ?? 0,
-                    cmgConfig.wheelOrientation.y ?? 0,
-                    cmgConfig.wheelOrientation.z ?? 1
-                ).unit(),
-                position: new CANNON.Vec3(
-                    cmgConfig.position.x ?? 0,
-                    cmgConfig.position.y ?? 0,
-                    cmgConfig.position.z ?? 0
-                ),
-                maxAngularMomentum: cmgConfig.maxAngularMomentum ?? 50,
-                maxTorque: cmgConfig.maxTorque ?? 2,
-                currentAngularMomentum: (cmgConfig.maxAngularMomentum ?? 50) * 0.8,
-                gimbalAngle: 0,
-                gimbalAngularVelocity: 0,
-                maxGimbalRate: 1.5
+                maxAngularMomentum: cmgConfig.maxAngularMomentum ?? 200,
+                maxTorque: cmgConfig.maxTorque ?? 5,
+                currentAngularMomentum: new CANNON.Vec3(0, 0, 0)
             };
             
             this.cmgs.push(cmg);
@@ -201,68 +193,51 @@ class AttitudeControlSystem {
     applyCMGControl(torque) {
         const dt = 1/60; // Physics timestep
         const desiredLocalTorque = torque;
-
-        // --- 1. Control Allocation: Calculate required gimbal rates ---
-        // CMG-1 controls X-axis torque
-        const cmg1 = this.cmgs.find(c => c.name === 'CMG-1');
-        if (cmg1 && cmg1.currentAngularMomentum > 0.1) {
-            cmg1.gimbalAngularVelocity = -desiredLocalTorque.x / cmg1.currentAngularMomentum;
-        } else if (cmg1) {
-            cmg1.gimbalAngularVelocity = 0;
-        }
-
-        // CMG-2 controls Y-axis torque
-        const cmg2 = this.cmgs.find(c => c.name === 'CMG-2');
-        if (cmg2 && cmg2.currentAngularMomentum > 0.1) {
-            cmg2.gimbalAngularVelocity = -desiredLocalTorque.y / cmg2.currentAngularMomentum;
-        } else if (cmg2) {
-            cmg2.gimbalAngularVelocity = 0;
-        }
-
-        // CMG-3 controls Z-axis torque
-        const cmg3 = this.cmgs.find(c => c.name === 'CMG-3');
-        if (cmg3 && cmg3.currentAngularMomentum > 0.1) {
-            cmg3.gimbalAngularVelocity = -desiredLocalTorque.z / cmg3.currentAngularMomentum;
-        } else if (cmg3) {
-            cmg3.gimbalAngularVelocity = 0;
-        }
         
-        // For simple inputs, command skew CMG (CMG-4) to a neutral angle (zero rate)
-        const cmg4 = this.cmgs.find(c => c.name === 'CMG-4');
-        if (cmg4) {
-            cmg4.gimbalAngularVelocity = 0;
-        }
+        // Check if CMGs exist
+        if (this.cmgs.length === 0) return;
 
-        // --- 2. Update CMG State: Integrate gimbal rates to get new angles ---
+        // Apply torque to each CMG
         this.cmgs.forEach(cmg => {
-            // Clamp gimbal velocity to its maximum physical speed
-            cmg.gimbalAngularVelocity = Math.max(-cmg.maxGimbalRate, Math.min(cmg.maxGimbalRate, cmg.gimbalAngularVelocity));
+            // Calculate current total angular momentum magnitude
+            const currentMomentumMag = cmg.currentAngularMomentum.length();
             
-            // Update angle based on velocity
-            cmg.gimbalAngle += cmg.gimbalAngularVelocity * dt;
+            // Limit torque based on available momentum capacity
+            let actualTorque = new CANNON.Vec3(desiredLocalTorque.x, desiredLocalTorque.y, desiredLocalTorque.z);
+            
+            // Check each axis and limit if necessary
+            for (let i = 0; i < 3; i++) {
+                const torqueComponent = desiredLocalTorque['xyz'[i]];
+                const momentumComponent = cmg.currentAngularMomentum['xyz'[i]];
+                
+                if (torqueComponent > 0) {
+                    // Requesting positive momentum change
+                    const momentumCapacity = cmg.maxAngularMomentum - momentumComponent;
+                    const maxPossibleTorque = momentumCapacity / dt;
+                    actualTorque['xyz'[i]] = Math.min(torqueComponent, maxPossibleTorque);
+                } else if (torqueComponent < 0) {
+                    // Requesting negative momentum change
+                    const momentumCapacity = momentumComponent - (-cmg.maxAngularMomentum);
+                    const maxPossibleTorque = momentumCapacity / dt;
+                    actualTorque['xyz'[i]] = Math.max(torqueComponent, -maxPossibleTorque);
+                }
+            }
+            
+            // Also clamp to max torque limit
+            const actualTorqueMag = actualTorque.length();
+            if (actualTorqueMag > cmg.maxTorque) {
+                actualTorque.scale(cmg.maxTorque / actualTorqueMag, actualTorque);
+            }
+            
+            // Update CMG angular momentum (opposite to torque applied to spacecraft)
+            const deltaMomentum = actualTorque.scale(dt * -1);
+            cmg.currentAngularMomentum.vadd(deltaMomentum, cmg.currentAngularMomentum);
+            
+            // Apply torque to satellite body
+            const worldTorque = new CANNON.Vec3();
+            this.satBody.quaternion.vmult(actualTorque, worldTorque);
+            this.satBody.applyTorque(worldTorque);
         });
-
-        // --- 3. Torque Application: Calculate actual torque from new gimbal rates ---
-        let totalOutputTorqueLocal = new CANNON.Vec3(0, 0, 0);
-
-        this.cmgs.forEach(cmg => {
-            const wheelAxis = cmg.wheelOrientation;
-            const gimbalAxis = wheelAxis.cross(cmg.gimbalOrientation).unit();
-            
-            // The momentum change rate (ḣ) is key. This is what produces torque.
-            const h_dot = gimbalAxis.scale(cmg.gimbalAngularVelocity).cross(wheelAxis.scale(cmg.currentAngularMomentum));
-            
-            // Sum momentum change rate from each CMG
-            totalOutputTorqueLocal.vadd(h_dot, totalOutputTorqueLocal);
-        });
-
-        // The torque on the satellite body is the negative of the total momentum change rate
-        totalOutputTorqueLocal.scale(1, totalOutputTorqueLocal);
-        
-        // Convert total local torque to world coordinates and apply it
-        const worldTorque = new CANNON.Vec3();
-        this.satBody.quaternion.vmult(totalOutputTorqueLocal, worldTorque);
-        this.satBody.applyTorque(worldTorque);
     }
 
     desaturateWithThrusters(thrusters, keyToThrusterIndices) {
@@ -309,36 +284,43 @@ class AttitudeControlSystem {
         } else if (this.mode === 'cmgs') {
             this.desaturationActive = true;
             
-            let nearSingularity = false;
+            // Calculate total momentum across all CMGs
+            let totalMomentum = new CANNON.Vec3(0, 0, 0);
             this.cmgs.forEach(cmg => {
-                if (Math.abs(Math.sin(cmg.gimbalAngle)) > 0.95) {
-                    nearSingularity = true;
-                }
+                totalMomentum.vadd(cmg.currentAngularMomentum, totalMomentum);
             });
             
-            if (nearSingularity) {
-                thrusters.forEach((thruster, index) => {
-                    if (index % 3 === 0) {
-                        const force = thruster.dir.scale(thruster.thrust * 0.2);
-                        this.satBody.applyLocalForce(force, thruster.pos);
-                    }
-                });
+            const totalMomentumMag = totalMomentum.length();
+            
+            // If total momentum is above threshold, use thrusters to desaturate all CMGs
+            if (totalMomentumMag > 10) {  // Threshold for desaturation
+                const momentumDir = totalMomentum.unit().scale(-1);
                 
-                this.cmgs.forEach(cmg => {
-                    if (Math.abs(Math.sin(cmg.gimbalAngle)) > 0.95) {
-                        cmg.gimbalAngle += 0.1;
+                thrusters.forEach((thruster, index) => {
+                    const torqueDirection = thruster.pos.cross(thruster.dir);
+                    const alignment = torqueDirection.dot(momentumDir);
+                    
+                    if (alignment > 0.5) {
+                        const force = thruster.dir.scale(thruster.thrust * 0.3);
+                        this.satBody.applyLocalForce(force, thruster.pos);
+                        
+                        // Reduce all CMGs' momentum
+                        const reductionFactor = 0.02;
+                        this.cmgs.forEach(cmg => {
+                            const reduction = momentumDir.scale(reductionFactor);
+                            cmg.currentAngularMomentum.vsub(reduction, cmg.currentAngularMomentum);
+                        });
                     }
                 });
             }
             
-            let stillNearSingularity = false;
+            // Recalculate total momentum
+            totalMomentum = new CANNON.Vec3(0, 0, 0);
             this.cmgs.forEach(cmg => {
-                if (Math.abs(Math.sin(cmg.gimbalAngle)) > 0.95) {
-                    stillNearSingularity = true;
-                }
+                totalMomentum.vadd(cmg.currentAngularMomentum, totalMomentum);
             });
             
-            if (!stillNearSingularity) {
+            if (totalMomentum.length() < 5) {
                 this.desaturationActive = false;
             }
         }
@@ -359,13 +341,19 @@ class AttitudeControlSystem {
                 percentage: (wheel.currentAngularMomentum / wheel.maxAngularMomentum * 100).toFixed(1)
             }));
         } else if (this.mode === 'cmgs' && this.cmgs.length > 0) {
-            status.cmgs = this.cmgs.map(cmg => ({
-                name: cmg.name,
-                momentum: cmg.currentAngularMomentum,
-                maxMomentum: cmg.maxAngularMomentum,
-                gimbalAngle: (cmg.gimbalAngle * 180 / Math.PI).toFixed(1),
-                nearSingularity: Math.abs(Math.sin(cmg.gimbalAngle)) > 0.95
-            }));
+            // Handle multiple CMGs
+            status.cmgs = this.cmgs.map(cmg => {
+                const momentumMag = cmg.currentAngularMomentum.length();
+                return {
+                    name: cmg.name,
+                    momentum: momentumMag,
+                    maxMomentum: cmg.maxAngularMomentum,
+                    momentumX: cmg.currentAngularMomentum.x,
+                    momentumY: cmg.currentAngularMomentum.y,
+                    momentumZ: cmg.currentAngularMomentum.z,
+                    percentage: (momentumMag / cmg.maxAngularMomentum * 100).toFixed(1)
+                };
+            });
         }
         
         return status;

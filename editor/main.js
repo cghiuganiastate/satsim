@@ -32,7 +32,7 @@ let spacecraftData = {
     "spacecraftProperties": {
         "dryMass": 5,
         "fuelMass": 5,
-        "maxFuelMass": 5,
+        "maxFuelMass":5,
         "inertia": {
             "x": 3,
             "y": 3,
@@ -56,6 +56,15 @@ let spacecraftData = {
         "thrusters": []
     }
 };
+
+// DEBUG: Add proxy to track modifications to spacecraftData.cmg
+const cmgHandler = {
+    set: function(target, prop, value) {
+        console.log('DEBUG: spacecraftData.cmg being modified - prop:', prop, 'value:', JSON.stringify(value));
+        return Reflect.set(target, prop, value);
+    }
+};
+spacecraftData.cmg = new Proxy(spacecraftData.cmg, cmgHandler);
 // Tab instances
 let modelTab, thrustersTab, camerasTab, attitudeTab, lightsTab;
 
@@ -73,6 +82,9 @@ function init() {
     // Create camera with proper FOV and aspect ratio
     camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000);
     camera.position.z = 5;
+    // Set default camera rotation: X=0, Y=180 degrees (π radians)
+    camera.rotation.x = 0;
+    camera.rotation.y = Math.PI;
     
     // Create renderer
     renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -89,7 +101,8 @@ function init() {
     scene.add(ambientLight);
     
     const directionalLight = new THREE.DirectionalLight(0xffffff, 0.5);
-    directionalLight.position.set(0, 1, 1);
+    // Set default light position: (0, 0, 0)
+    directionalLight.position.set(0, 0, 0);
     scene.add(directionalLight);
     
     // Add grid helper for reference at y=-2
@@ -149,8 +162,8 @@ function setupEventListeners() {
     const rightPanel = document.getElementById('right-panel');
     
     togglePanelBtn.addEventListener('click', () => {
-        rightPanel.classList.toggle('visible');
-        togglePanelBtn.classList.toggle('panel-hidden');
+        rightPanel.classList.toggle('hidden');
+        togglePanelBtn.classList.toggle('panel-visible');
     });
     
     // Import model button
@@ -186,6 +199,9 @@ function setupEventListeners() {
                         spacecraftModel = new THREE.Mesh(geometry, material);
                         scene.add(spacecraftModel);
                         
+                        // Apply scale if enabled
+                        applyScaleToModel();
+                        
                         // Update model tab with new model
                         modelTab.setModel(spacecraftModel);
                         
@@ -204,6 +220,9 @@ function setupEventListeners() {
                             spacecraftModel = gltf.scene;
                             scene.add(spacecraftModel);
                             
+                            // Apply scale if enabled
+                            applyScaleToModel();
+                            
                             // Update model tab with new model
                             modelTab.setModel(spacecraftModel);
                             
@@ -218,6 +237,28 @@ function setupEventListeners() {
         input.click();
     });
     
+    // NEW: Event listeners for scale controls
+    const enableScaleCheckbox = document.getElementById('enable-scale');
+    const modelScaleInput = document.getElementById('model-scale');
+    
+    function applyScaleToModel() {
+        if (!spacecraftModel) return;
+        
+        const enableScale = enableScaleCheckbox.checked;
+        const scale = parseFloat(modelScaleInput.value) || 1;
+        
+        if (enableScale) {
+            spacecraftModel.scale.set(scale, scale, scale);
+        } else {
+            spacecraftModel.scale.set(1, 1, 1);
+        }
+        
+        spacecraftModel.updateMatrixWorld();
+    }
+    
+    enableScaleCheckbox.addEventListener('change', applyScaleToModel);
+    modelScaleInput.addEventListener('input', applyScaleToModel);
+    
     // --- EXPORT (CORRECTED) ---
     document.getElementById('export-config').addEventListener('click', () => {
         // Update spacecraft properties from form
@@ -226,17 +267,28 @@ function setupEventListeners() {
         spacecraftData.spacecraftProperties.dryMass = parseFloat(document.getElementById('dry-mass').value);
         spacecraftData.spacecraftProperties.fuelMass = parseFloat(document.getElementById('fuel-mass').value);
         spacecraftData.spacecraftProperties.maxFuelMass = parseFloat(document.getElementById('max-fuel-mass').value);
-        spacecraftData.spacecraftProperties.inertia.x = parseFloat(document.getElementById('inertia-x').value);
-        spacecraftData.spacecraftProperties.inertia.y = parseFloat(document.getElementById('inertia-y').value);
-        spacecraftData.spacecraftProperties.inertia.z = parseFloat(document.getElementById('inertia-z').value);
+        spacecraftData.spacecraftProperties.inertia.x = parseFloat(document.getElementById('inertia-xx').value);
+        spacecraftData.spacecraftProperties.inertia.y = parseFloat(document.getElementById('inertia-yy').value);
+        spacecraftData.spacecraftProperties.inertia.z = parseFloat(document.getElementById('inertia-zz').value);
+        
+        // DEBUG: Print spacecraftData.cmg before export
+        console.log('DEBUG: spacecraftData.cmg before export:', JSON.stringify(spacecraftData.cmg, null, 2));
         
         // Get the current CG values from the UI. This is our offset.
         const cgX = parseFloat(document.getElementById('cg-x').value) || 0;
         const cgY = parseFloat(document.getElementById('cg-y').value) || 0;
         const cgZ = parseFloat(document.getElementById('cg-z').value) || 0;
         
+        // DEBUG: Log spacecraftData state before export
+        console.log('DEBUG: spacecraftData BEFORE deep copy:', JSON.stringify(spacecraftData, null, 2));
+        console.log('DEBUG: spacecraftData.cmg.cmgs length:', spacecraftData.cmg?.cmgs?.length || 0);
+        
         // Create a deep copy for exporting
         const exportData = JSON.parse(JSON.stringify(spacecraftData));
+        
+        // DEBUG: Print exportData.cmg after deep copy
+        console.log('DEBUG: exportData.cmg after deep copy:', JSON.stringify(exportData.cmg, null, 2));
+        console.log('DEBUG: exportData.cmg.cmgs length:', exportData.cmg?.cmgs?.length || 0);
         
         // DO NOT modify the centerOfMass field. It serves as metadata for re-importing.
         
@@ -252,7 +304,11 @@ function setupEventListeners() {
         if (exportData.model?.position) offsetPosition(exportData.model.position);
         exportData.thrusters?.thrusters?.forEach(t => offsetPosition(t.position));
         exportData.cameras?.cameras?.forEach(c => offsetPosition(c.position));
-        exportData.cmg?.cmgs?.forEach(c => offsetPosition(c.position));
+        
+        // Handle CMG: CMGs are in array format and don't have position
+        // Note: Simplified CMG format doesn't have position, so no offset needed
+        console.log('DEBUG: Exporting CMG array with length:', exportData.cmg?.cmgs?.length || 0);
+        
         exportData.reactionwheels?.wheels?.forEach(w => offsetPosition(w.position));
         exportData.lamps?.lamps?.forEach(l => offsetPosition(l.position));
         
@@ -263,13 +319,15 @@ function setupEventListeners() {
             model: exportData.model, // This now correctly includes the features
             // Transform nested arrays to direct arrays as expected by validation
             cameras: exportData.cameras?.cameras || [],
-            cmg: {
-                cmgs: exportData.cmg?.cmgs || []
-            },
+            // Handle CMG: export as array format
+            cmg: { cmgs: exportData.cmg?.cmgs || [] },
             lamps: exportData.lamps?.lamps || [],
             reactionwheels: exportData.reactionwheels?.wheels || [],
             thrusters: exportData.thrusters?.thrusters || []
         };
+        
+        // DEBUG: Print formattedExportData.cmg after formatting
+        console.log('DEBUG: formattedExportData.cmg after formatting:', JSON.stringify(formattedExportData.cmg, null, 2));
         
         // Export as JSON
         const dataStr = JSON.stringify(formattedExportData, null, 2);
@@ -281,79 +339,6 @@ function setupEventListeners() {
         linkElement.click();
         
         showNotification('Configuration exported successfully!');
-    });
-    
-    // --- BAKE CONFIG (CORRECTED) ---
-    document.getElementById('bake-config').addEventListener('click', () => {
-        // Update spacecraft properties from form
-        spacecraftData.spacecraftProperties.name = document.getElementById('spacecraft-name').value;
-        spacecraftData.spacecraftProperties.description = document.getElementById('spacecraft-description').value;
-        spacecraftData.spacecraftProperties.dryMass = parseFloat(document.getElementById('dry-mass').value);
-        spacecraftData.spacecraftProperties.fuelMass = parseFloat(document.getElementById('fuel-mass').value);
-        spacecraftData.spacecraftProperties.maxFuelMass = parseFloat(document.getElementById('max-fuel-mass').value);
-        spacecraftData.spacecraftProperties.inertia.x = parseFloat(document.getElementById('inertia-x').value);
-        spacecraftData.spacecraftProperties.inertia.y = parseFloat(document.getElementById('inertia-y').value);
-        spacecraftData.spacecraftProperties.inertia.z = parseFloat(document.getElementById('inertia-z').value);
-        
-        // Get the current CG values from the UI. This is our offset.
-        const cgX = parseFloat(document.getElementById('cg-x').value) || 0;
-        const cgY = parseFloat(document.getElementById('cg-y').value) || 0;
-        const cgZ = parseFloat(document.getElementById('cg-z').value) || 0;
-        
-        // Create a deep copy for baking
-        const bakeData = JSON.parse(JSON.stringify(spacecraftData));
-        
-        // CORRECTED: Function to offset positions by the negative of the CG.
-        // It now handles both object {x,y,z} and array [x,y,z] formats.
-        function offsetPosition(position) {
-            if (!position) return;
-            if (Array.isArray(position)) { // Handle array format like thrusters
-                position[0] -= cgX;
-                position[1] -= cgY;
-                position[2] -= cgZ;
-            } else if (typeof position === 'object') { // Handle object format like cameras
-                position.x -= cgX;
-                position.y -= cgY;
-                position.z -= cgZ;
-            }
-        }
-        
-        // Offset all component positions in the bake data
-        bakeData.thrusters?.thrusters?.forEach(t => offsetPosition(t.position));
-        bakeData.cameras?.cameras?.forEach(c => offsetPosition(c.position));
-        bakeData.cmg?.cmgs?.forEach(c => offsetPosition(c.position));
-        bakeData.reactionwheels?.wheels?.forEach(w => offsetPosition(w.position));
-        bakeData.lamps?.lamps?.forEach(l => offsetPosition(l.position));
-        
-        // Create a new object with the EXACT structure requested
-        // CORRECTED: Ensure the model and its features are NOT included in the baked config
-        const formattedBakeData = {
-            cameras: bakeData.cameras?.cameras || [],
-            cmg: {
-                cmgs: bakeData.cmg?.cmgs || []
-            },
-            spacecraftProperties: bakeData.spacecraftProperties,
-            lamps: { // CORRECTED: Wrap in an object with a "lamps" key
-                lamps: bakeData.lamps?.lamps || []
-            },
-            reactionwheels: { // CORRECTED: Wrap in an object with a "wheels" key
-                wheels: bakeData.reactionwheels?.wheels || []
-            },
-            thrusters: { // CORRECTED: Wrap in an object with a "thrusters" key
-                thrusters: bakeData.thrusters?.thrusters || []
-            }
-        };
-        
-        // Export as JSON
-        const dataStr = JSON.stringify(formattedBakeData, null, 2);
-        const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
-        
-        const linkElement = document.createElement('a');
-        linkElement.setAttribute('href', dataUri);
-        linkElement.setAttribute('download', 'spacecraft-baked-config.json');
-        linkElement.click();
-        
-        showNotification('Baked configuration exported successfully!');
     });
     
     // --- EXPORT MODEL (CORRECTED) ---
@@ -471,9 +456,9 @@ function setupEventListeners() {
                         document.getElementById('dry-mass').value = props.dryMass;
                         document.getElementById('fuel-mass').value = props.fuelMass;
                         document.getElementById('max-fuel-mass').value = props.maxFuelMass;
-                        document.getElementById('inertia-x').value = props.inertia.x;
-                        document.getElementById('inertia-y').value = props.inertia.y;
-                        document.getElementById('inertia-z').value = props.inertia.z;
+        document.getElementById('inertia-xx').value = props.inertia.x;
+        document.getElementById('inertia-yy').value = props.inertia.y;
+        document.getElementById('inertia-zz').value = props.inertia.z;
                         
                         const cg = props.centerOfMass || { x: 0, y: 0, z: 0 };
                         document.getElementById('cg-x').value = cg.x;
@@ -546,6 +531,36 @@ function setupEventListeners() {
     cgXInput.addEventListener('input', updateCGPosition);
     cgYInput.addEventListener('input', updateCGPosition);
     cgZInput.addEventListener('input', updateCGPosition);
+
+    // NEW: Event listeners for camera rotation controls
+    const cameraRotXInput = document.getElementById('camera-rot-x');
+    const cameraRotYInput = document.getElementById('camera-rot-y');
+
+    function updateCameraRotation() {
+        camera.rotation.x = parseFloat(cameraRotXInput.value) || 0;
+        camera.rotation.y = parseFloat(cameraRotYInput.value) || 0;
+        camera.updateMatrixWorld();
+    }
+
+    cameraRotXInput.addEventListener('input', updateCameraRotation);
+    cameraRotYInput.addEventListener('input', updateCameraRotation);
+
+    // NEW: Event listeners for light position controls
+    const lightPosXInput = document.getElementById('light-pos-x');
+    const lightPosYInput = document.getElementById('light-pos-y');
+    const lightPosZInput = document.getElementById('light-pos-z');
+
+    function updateLightPosition() {
+        directionalLight.position.set(
+            parseFloat(lightPosXInput.value) || 0,
+            parseFloat(lightPosYInput.value) || 0,
+            parseFloat(lightPosZInput.value) || 0
+        );
+    }
+
+    lightPosXInput.addEventListener('input', updateLightPosition);
+    lightPosYInput.addEventListener('input', updateLightPosition);
+    lightPosZInput.addEventListener('input', updateLightPosition);
 }
 
 // Show notification
