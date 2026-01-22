@@ -202,25 +202,24 @@ class AttitudeControlSystem {
             // Calculate current total angular momentum magnitude
             const currentMomentumMag = cmg.currentAngularMomentum.length();
             
-            // Limit torque based on available momentum capacity
+            // Limit torque based on available momentum capacity (magnitude-based, not per-axis)
             let actualTorque = new CANNON.Vec3(desiredLocalTorque.x, desiredLocalTorque.y, desiredLocalTorque.z);
             
-            // Check each axis and limit if necessary
-            for (let i = 0; i < 3; i++) {
-                const torqueComponent = desiredLocalTorque['xyz'[i]];
-                const momentumComponent = cmg.currentAngularMomentum['xyz'[i]];
-                
-                if (torqueComponent > 0) {
-                    // Requesting positive momentum change
-                    const momentumCapacity = cmg.maxAngularMomentum - momentumComponent;
-                    const maxPossibleTorque = momentumCapacity / dt;
-                    actualTorque['xyz'[i]] = Math.min(torqueComponent, maxPossibleTorque);
-                } else if (torqueComponent < 0) {
-                    // Requesting negative momentum change
-                    const momentumCapacity = momentumComponent - (-cmg.maxAngularMomentum);
-                    const maxPossibleTorque = momentumCapacity / dt;
-                    actualTorque['xyz'[i]] = Math.max(torqueComponent, -maxPossibleTorque);
-                }
+            // Calculate the momentum change that would result from applying full torque
+            // Note: deltaMomentum = -torque * dt (momentum is stored opposite to torque on spacecraft)
+            const desiredDeltaMomentum = actualTorque.scale(dt * -1);
+            const desiredDeltaMomentumMag = desiredDeltaMomentum.length();
+            
+            // Check if torque would increase or decrease momentum magnitude
+            const dotProduct = cmg.currentAngularMomentum.dot(desiredDeltaMomentum);
+            
+            // If torque would increase momentum (dot product > 0) and we're at max, scale it down
+            if (dotProduct > 0 && currentMomentumMag >= cmg.maxAngularMomentum) {
+                // Calculate how much momentum we can add
+                const availableMomentum = cmg.maxAngularMomentum - currentMomentumMag;
+                // Scale torque so we don't exceed max momentum
+                const scaleFactor = availableMomentum / (dotProduct);
+                actualTorque.scale(scaleFactor, actualTorque);
             }
             
             // Also clamp to max torque limit
