@@ -291,19 +291,28 @@ function createDockingPort(geometry) {
   const size = new THREE.Vector3();
   box.getSize(size);
 
-  // 3. Create the CANNON.Box shape using the box's half-extents
+  // 3. Get the center of the geometry to calculate the offset
+  const center = new THREE.Vector3();
+  box.getCenter(center);
+  
+  // 4. Calculate the offset position: desired world position + geometry center offset
+  const offsetX = 0 + center.x;  // 0 is the desired world X position
+  const offsetY = -2 + center.y; // -2 is the desired world Y position
+  const offsetZ = 5.5 + center.z; // 5.5 is the desired world Z position
+
+  // 5. Create the CANNON.Box shape using the box's half-extents
   const halfExtents = new CANNON.Vec3(size.x / 2, size.y / 2, size.z / 2);
   const boxShape = new CANNON.Box(halfExtents);
 
-  // 4. Create the physics body
+  // 6. Create the physics body at the offset position
   const dockingPortBody = new CANNON.Body({
     mass: 0, // static
-    position: new CANNON.Vec3(0, -2, 5.5)
+    position: new CANNON.Vec3(offsetX, offsetY, offsetZ)
   });
   dockingPortBody.addShape(boxShape);
   world.addBody(dockingPortBody);
 
-  // 5. Create the visual representation of the collision box (the red wireframe)
+  // 7. Create the visual representation of the collision box (the red wireframe)
   const collisionGeometry = new THREE.BoxGeometry(size.x, size.y, size.z);
   const collisionMaterial = new THREE.MeshBasicMaterial({
     color: 0xff0000,
@@ -312,7 +321,7 @@ function createDockingPort(geometry) {
     wireframe: true
   });
   const dockingPortCollisionMesh = new THREE.Mesh(collisionGeometry, collisionMaterial);
-  dockingPortCollisionMesh.position.set(0, -2, 5.5);
+  dockingPortCollisionMesh.position.set(offsetX, offsetY, offsetZ);
   dockingPortCollisionMesh.visible = false; // Initially hidden
   scene.add(dockingPortCollisionMesh);
 
@@ -951,7 +960,6 @@ function createDockingPort(geometry) {
     URL.revokeObjectURL(url);
     
     console.log('Exported position/orientation:', positionData);
-    alert('Position and orientation exported to spacecraft_position.json');
   });
 
   initializeDefaultSpacecraft();

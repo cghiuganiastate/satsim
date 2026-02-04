@@ -73,10 +73,10 @@ export class LampManager {
     const color = new THREE.Color(config.color || '#ffffff');
     const light = new THREE.SpotLight(
       color,
-      config.intensity,
-      config.distance || 20,
-      config.angle,
-      config.penumbra || 0.2
+      parseFloat(config.intensity) || 1,
+      parseFloat(config.distance) || 20,
+      parseFloat(config.angle),
+      parseFloat(config.penumbra) || 0.2
     );
 
     if (config.castShadow) {
@@ -123,18 +123,27 @@ export class LampManager {
       const helper = this.lampHelpers[index];
 
       // --- 1. Calculate Light's World Position ---
-      // Start with lamp's local position from config
-      this._tempPos.set(config.position.x, config.position.y, config.position.z);
+      // Start with lamp's local position from config (convert strings to numbers)
+      this._tempPos.set(
+        parseFloat(config.position.x),
+        parseFloat(config.position.y),
+        parseFloat(config.position.z)
+      );
       // Apply spacecraft's world transform to get final world position
       this._tempPos.applyMatrix4(this._tempMatrix);
       // Set light's position in world space
       light.position.copy(this._tempPos);
 
       // --- 2. Calculate Light's World Direction ---
-      // Create a matrix for lamp's local rotation
+      // Create a matrix for lamp's local rotation (convert strings to numbers)
       this._lampLocalMatrix.compose(
         new THREE.Vector3(), // No local position for direction calculation
-        new THREE.Quaternion().setFromEuler(new THREE.Euler(config.rotation.x, config.rotation.y, config.rotation.z, 'XYZ')),
+        new THREE.Quaternion().setFromEuler(new THREE.Euler(
+          parseFloat(config.rotation.x),
+          parseFloat(config.rotation.y),
+          parseFloat(config.rotation.z),
+          'XYZ'
+        )),
         new THREE.Vector3(1, 1, 1) // No scale
       );
       // Combine spacecraft's transform with lamp's local rotation
@@ -146,7 +155,7 @@ export class LampManager {
       this._tempDir.transformDirection(this._combinedMatrix);
 
       // --- 3. Update Target's World Position ---
-      const targetDistance = config.distance || 20;
+      const targetDistance = parseFloat(config.distance) || 20;
       // Position the target at the light's position, plus the direction vector scaled by distance
       light.target.position.copy(light.position).add(this._tempDir.multiplyScalar(targetDistance));
 

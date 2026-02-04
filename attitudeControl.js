@@ -73,9 +73,9 @@ class AttitudeControlSystem {
     processReactionWheelsConfig(data) {
         data.wheels.forEach((wheelConfig, index) => {
             const rawOrientation = new CANNON.Vec3(
-                wheelConfig.orientation.x ?? 0,
-                wheelConfig.orientation.y ?? 0,
-                wheelConfig.orientation.z ?? 1
+                parseFloat(wheelConfig.orientation?.x) ?? 0,
+                parseFloat(wheelConfig.orientation?.y) ?? 0,
+                parseFloat(wheelConfig.orientation?.z) ?? 1
             );
             const normalizedOrientation = rawOrientation.unit();
 
@@ -84,12 +84,12 @@ class AttitudeControlSystem {
                 name: wheelConfig.name || `RW${index}`,
                 orientation: normalizedOrientation,
                 position: new CANNON.Vec3(
-                    wheelConfig.position.x ?? 0,
-                    wheelConfig.position.y ?? 0,
-                    wheelConfig.position.z ?? 0
+                    parseFloat(wheelConfig.position?.x) ?? 0,
+                    parseFloat(wheelConfig.position?.y) ?? 0,
+                    parseFloat(wheelConfig.position?.z) ?? 0
                 ),
-                maxAngularMomentum: wheelConfig.maxAngularMomentum ?? 10,
-                maxTorque: wheelConfig.maxTorque ?? 0.5,
+                maxAngularMomentum: parseFloat(wheelConfig.maxAngularMomentum) ?? 10,
+                maxTorque: parseFloat(wheelConfig.maxTorque) ?? 0.5,
                 currentAngularMomentum: 0
             };
             
@@ -120,8 +120,8 @@ class AttitudeControlSystem {
             const cmg = {
                 index: index,
                 name: cmgConfig.name || `CMG${index}`,
-                maxAngularMomentum: cmgConfig.maxAngularMomentum ?? 200,
-                maxTorque: cmgConfig.maxTorque ?? 5,
+                maxAngularMomentum: parseFloat(cmgConfig.maxAngularMomentum) ?? 200,
+                maxTorque: parseFloat(cmgConfig.maxTorque) ?? 5,
                 currentAngularMomentum: new CANNON.Vec3(0, 0, 0)
             };
             

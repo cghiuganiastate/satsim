@@ -98,9 +98,10 @@ function processLoadedModel(model, rotation, centroidModel, properties, scene, w
   const shape = new CANNON.Box(new CANNON.Vec3(size.x / 2, size.y / 2, size.z / 2));
   
   // Update fuel system variables if provided in properties
-  if (properties.dryMass !== undefined) dryMass = properties.dryMass;
-  if (properties.fuelMass !== undefined) fuelMass = properties.fuelMass;
-  if (properties.maxFuelMass !== undefined) maxFuelMass = properties.maxFuelMass;
+  // Convert strings to numbers
+  if (properties.dryMass !== undefined) dryMass = parseFloat(properties.dryMass);
+  if (properties.fuelMass !== undefined) fuelMass = parseFloat(properties.fuelMass);
+  if (properties.maxFuelMass !== undefined) maxFuelMass = parseFloat(properties.maxFuelMass);
   
   // Calculate total mass (dry mass + fuel mass)
   const totalMass = dryMass + fuelMass;

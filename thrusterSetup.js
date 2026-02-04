@@ -1,5 +1,9 @@
 // File: thrusterSetup.js
 
+// Auto-binding tolerances
+const TRANSLATION_ANGLE_DEGREES = 90-25;
+const TRANSLATION_TOLERANCE = Math.cos(TRANSLATION_ANGLE_DEGREES * Math.PI / 180);
+
 /**
  * Initializes all thrusters based on a configuration file.
  * It creates physics objects, visual representations, and automatically
@@ -68,17 +72,18 @@ function processThrusterConfig(config, CANNON, satMesh, keyToThrusterIndices, cr
 
     // --- DATA SANITIZATION ---
     // This is critical fix. We ensure thrust and isp are valid numbers.
+    // First convert strings to numbers, then validate.
 
     // Sanitize thrust value
-    let thrust = t.thrust || 50; // Default to 50N if not specified
-    if (typeof thrust !== 'number' || isNaN(thrust) || thrust < 0) {
+    let thrust = parseFloat(t.thrust);
+    if (isNaN(thrust) || thrust <= 0) {
       console.warn(`Invalid thrust value for thruster "${t.name || i}": ${t.thrust}. Defaulting to 50N.`);
       thrust = 50;
     }
 
     // Sanitize ISP value
-    let isp = t.isp || 300; // Default to 300s if not specified
-    if (typeof isp !== 'number' || isNaN(isp) || isp <= 0) {
+    let isp = parseFloat(t.isp);
+    if (isNaN(isp) || isp <= 0) {
       console.warn(`Invalid ISP value for thruster "${t.name || i}": ${t.isp}. Defaulting to 300s.`);
       isp = 300;
     }
@@ -87,28 +92,28 @@ function processThrusterConfig(config, CANNON, satMesh, keyToThrusterIndices, cr
     // ---------- AUTO-MAPPING ----------
     // Translation: thruster points mostly along one axis
     const dot = (a, b) => a.dot(b);
-    if (Math.abs(dot(dir, new CANNON.Vec3(0, 0, 1))) > 0.7) keyToThrusterIndices[dir.z > 0 ? 'w' : 's'].push(i);
-    if (Math.abs(dot(dir, new CANNON.Vec3(1, 0, 0))) > 0.7) keyToThrusterIndices[dir.x > 0 ? 'a' : 'd'].push(i);
-    if (Math.abs(dot(dir, new CANNON.Vec3(0, 1, 0))) > 0.7) keyToThrusterIndices[dir.y > 0 ? 'e' : 'q'].push(i);
+    if (Math.abs(dot(dir, new CANNON.Vec3(0, 0, 1))) > TRANSLATION_TOLERANCE) keyToThrusterIndices[dir.z > 0 ? 'w' : 's'].push(i);
+    if (Math.abs(dot(dir, new CANNON.Vec3(1, 0, 0))) > TRANSLATION_TOLERANCE) keyToThrusterIndices[dir.x > 0 ? 'a' : 'd'].push(i);
+    if (Math.abs(dot(dir, new CANNON.Vec3(0, 1, 0))) > TRANSLATION_TOLERANCE) keyToThrusterIndices[dir.y > 0 ? 'e' : 'q'].push(i);
 
     // Rotation: torque = r × F  (lever arm × direction)
     const lever = pos;
     const torque = lever.cross(dir);
 
     // Pitch (rotation around X axis)
-    if (Math.abs(torque.x) > 0.1) {
+    if (Math.abs(torque.x) > 0.025) {
       if (torque.x > 0) keyToThrusterIndices['k'].push(i); // pitch up
       else keyToThrusterIndices['i'].push(i); // pitch down
     }
 
     // Yaw (rotation around Y axis)
-    if (Math.abs(torque.y) > 0.1) {
+    if (Math.abs(torque.y) > 0.025) {
       if (torque.y > 0) keyToThrusterIndices['j'].push(i); // yaw left
       else keyToThrusterIndices['l'].push(i); // yaw right
     }
 
     // Roll (rotation around Z axis)
-    if (Math.abs(torque.z) > 0.1) {
+    if (Math.abs(torque.z) > 0.025) {
       if (torque.z > 0) keyToThrusterIndices['o'].push(i); // roll left
       else keyToThrusterIndices['u'].push(i); // roll right
     }

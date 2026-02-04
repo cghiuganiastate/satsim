@@ -298,28 +298,28 @@ export class CameraSystem {
             if (cameraIndex < this.firstPersonCameras.length) {
                 const currentCamera = this.firstPersonCameras[cameraIndex];
                 
-                // Set camera position relative to target
+                // Set camera position relative to target (convert strings to numbers)
                 const localPosition = new THREE.Vector3(
-                    currentCamera.position.x,
-                    currentCamera.position.y,
-                    currentCamera.position.z
+                    parseFloat(currentCamera.position.x),
+                    parseFloat(currentCamera.position.y),
+                    parseFloat(currentCamera.position.z)
                 );
                 const worldPosition = localPosition.applyQuaternion(this.targetObject.quaternion);
                 this.camera.position.copy(this.targetObject.position).add(worldPosition);
                 
-                // Set camera rotation
+                // Set camera rotation (convert strings to numbers)
                 const localRotation = new THREE.Euler(
-                    currentCamera.rotation.x,
-                    currentCamera.rotation.y,
-                    currentCamera.rotation.z
+                    parseFloat(currentCamera.rotation.x),
+                    parseFloat(currentCamera.rotation.y),
+                    parseFloat(currentCamera.rotation.z)
                 );
                 const localQuaternion = new THREE.Quaternion().setFromEuler(localRotation);
                 const worldQuaternion = this.targetObject.quaternion.clone().multiply(localQuaternion);
                 this.camera.quaternion.copy(worldQuaternion);
                 
-                // Set field of view if specified
+                // Set field of view if specified (convert strings to numbers)
                 if (currentCamera.fov !== undefined) {
-                    this.camera.fov = currentCamera.fov;
+                    this.camera.fov = parseFloat(currentCamera.fov);
                     this.camera.updateProjectionMatrix();
                 }
             }
