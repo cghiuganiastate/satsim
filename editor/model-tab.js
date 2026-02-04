@@ -190,18 +190,18 @@ export class ModelTab extends FeatureManager {
                 controlsHtml = `
                     <div class="feature-controls">
                         <div class="control-group">
-                            <label>X:</label>
-                            <input type="number" value="${feature.vector.x}" step="0.1" 
+                            <label>X (m):</label>
+                            <input type="number" value="${feature.vector.x}" step="0.01" 
                                 oninput="modelTab.updateFeature(${index}, 'vector.x', this.value)">
                         </div>
                         <div class="control-group">
-                            <label>Y:</label>
-                            <input type="number" value="${feature.vector.y}" step="0.1" 
+                            <label>Y (m):</label>
+                            <input type="number" value="${feature.vector.y}" step="0.01" 
                                 oninput="modelTab.updateFeature(${index}, 'vector.y', this.value)">
                         </div>
                         <div class="control-group">
-                            <label>Z:</label>
-                            <input type="number" value="${feature.vector.z}" step="0.1" 
+                            <label>Z (m):</label>
+                            <input type="number" value="${feature.vector.z}" step="0.01" 
                                 oninput="modelTab.updateFeature(${index}, 'vector.z', this.value)">
                         </div>
                     </div>

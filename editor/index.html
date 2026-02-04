@@ -67,21 +67,39 @@
             display: flex;
             flex: 1;
             overflow: hidden;
+            position: relative;
         }
         
         #left-panel {
             width: 300px;
             background-color: #eee;
             padding: 15px;
-            overflow-y: auto; /* Enable vertical scrolling */
-            height: 100%; /* Make sure it takes full height */
-            box-sizing: border-box; /* Include padding in height calculation */
+            overflow-y: auto;
+            box-sizing: border-box;
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            z-index: 10;
+            box-shadow: 2px 0 5px rgba(0,0,0,0.1);
         }
         
         #scene-container {
             flex: 1;
             position: relative;
+            margin-left: 300px; /* Space for left panel */
+            transition: margin-left 0.3s ease, margin-right 0.3s ease;
+            margin-right: 250px; /* Space for right panel */
         }
+        
+        #scene-container.left-panel-hidden {
+            margin-left: 0;
+        }
+        
+        #scene-container.right-panel-hidden {
+            margin-right: 0;
+        }
+        
         
         #right-panel {
             width: 250px;
@@ -120,6 +138,10 @@
         
         .toggle-panel-btn.panel-visible {
             right: 250px;
+        }
+        
+        .toggle-panel-btn.panel-hidden {
+            right: 0;
         }
         
         .tab-content {
@@ -199,6 +221,13 @@
             background-color: #d32f2f;
         }
         
+        .bulk-actions {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+            align-items: center;
+        }
+        
         #notification {
             position: fixed;
             bottom: 20px;
@@ -245,6 +274,10 @@
                 <!-- Thrusters Tab Content -->
                 <div id="thrusters-tab" class="tab-content">
                     <h3>Thrusters</h3>
+                    <div class="bulk-actions">
+                        <button id="autobind-all">Autobind All</button>
+                        <button id="unbind-all">Unbind All</button>
+                    </div>
                     <div id="thrusters-list">
                         <!-- Thrusters will be added here dynamically -->
                     </div>
@@ -296,18 +329,18 @@
                     <textarea id="spacecraft-description" rows="3">A custom spacecraft with specific properties</textarea>
                 </div>
                 <div class="control-group">
-                    <label>Dry Mass:</label>
+                    <label>Dry Mass (kg):</label>
                     <input type="number" id="dry-mass" value="5">
                 </div>
                 <div class="control-group">
-                    <label>Fuel Mass:</label>
+                    <label>Fuel Mass (kg):</label>
                     <input type="number" id="fuel-mass" value="5">
                 </div>
                 <div class="control-group">
-                    <label>Max Fuel:</label>
+                    <label>Max Fuel (kg):</label>
                     <input type="number" id="max-fuel-mass" value="5">
                 </div>
-                <h4>Moment of Inertia</h4>
+                <h4>Moment of Inertia (kg m²)</h4>
                 <div class="control-group">
                     <label>Ixx:</label>
                     <input type="number" id="inertia-xx" value="3">
@@ -322,46 +355,22 @@
                 </div>
             
                 <!-- New Center of Mass Section -->
-                <h4>Center of Mass (CG)</h4>
+                <h4>Center of Mass (CG) (m)</h4>
                 <div class="control-group">
                     <label>X:</label>
-                    <input type="number" id="cg-x" value="0" step="0.1">
+                    <input type="number" id="cg-x" value="0" step="0.01">
                 </div>
                 <div class="control-group">
                     <label>Y:</label>
-                    <input type="number" id="cg-y" value="0" step="0.1">
+                    <input type="number" id="cg-y" value="0" step="0.01">
                 </div>
                 <div class="control-group">
                     <label>Z:</label>
-                    <input type="number" id="cg-z" value="0" step="0.1">
+                    <input type="number" id="cg-z" value="0" step="0.01">
                 </div>
                 <div class="control-group">
                     <label>Show CG:</label>
                     <input type="checkbox" id="toggle-cg-visual">
-                </div>
-                
-                <h4>Camera Rotation</h4>
-                <div class="control-group">
-                    <label>Rot X:</label>
-                    <input type="number" id="camera-rot-x" value="0" step="0.1">
-                </div>
-                <div class="control-group">
-                    <label>Rot Y:</label>
-                    <input type="number" id="camera-rot-y" value="3.14159" step="0.1">
-                </div>
-                
-                <h4>Light Position</h4>
-                <div class="control-group">
-                    <label>X:</label>
-                    <input type="number" id="light-pos-x" value="0" step="0.1">
-                </div>
-                <div class="control-group">
-                    <label>Y:</label>
-                    <input type="number" id="light-pos-y" value="0" step="0.1">
-                </div>
-                <div class="control-group">
-                    <label>Z:</label>
-                    <input type="number" id="light-pos-z" value="0" step="0.1">
                 </div>
                 
                 <h4>Model Scale</h4>

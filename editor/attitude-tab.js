@@ -237,15 +237,15 @@ export class AttitudeTab extends FeatureManager {
                 <div class="feature-controls">
                     <div class="control-group"><label>Name:</label><input type="text" class="attitude-input" data-type="${type}" data-index="${index}" data-property="name" value="${feature.name}"></div>
                     ${type === 'rw' ? `
-                    <div class="control-group"><label>Position X:</label><input type="number" class="attitude-input" data-type="${type}" data-index="${index}" data-property="position.x" value="${feature.position.x}" step="0.1"></div>
-                    <div class="control-group"><label>Position Y:</label><input type="number" class="attitude-input" data-type="${type}" data-index="${index}" data-property="position.y" value="${feature.position.y}" step="0.1"></div>
-                    <div class="control-group"><label>Position Z:</label><input type="number" class="attitude-input" data-type="${type}" data-index="${index}" data-property="position.z" value="${feature.position.z}" step="0.1"></div>
+                    <div class="control-group"><label>Position X (m):</label><input type="number" class="attitude-input" data-type="${type}" data-index="${index}" data-property="position.x" value="${feature.position.x}" step="0.01"></div>
+                    <div class="control-group"><label>Position Y (m):</label><input type="number" class="attitude-input" data-type="${type}" data-index="${index}" data-property="position.y" value="${feature.position.y}" step="0.01"></div>
+                    <div class="control-group"><label>Position Z (m):</label><input type="number" class="attitude-input" data-type="${type}" data-index="${index}" data-property="position.z" value="${feature.position.z}" step="0.01"></div>
                     <div class="control-group"><label>Orientation X:</label><input type="number" class="attitude-input" data-type="${type}" data-index="${index}" data-property="orientation.x" value="${feature.orientation.x}" step="0.1"></div>
                     <div class="control-group"><label>Orientation Y:</label><input type="number" class="attitude-input" data-type="${type}" data-index="${index}" data-property="orientation.y" value="${feature.orientation.y}" step="0.1"></div>
                     <div class="control-group"><label>Orientation Z:</label><input type="number" class="attitude-input" data-type="${type}" data-index="${index}" data-property="orientation.z" value="${feature.orientation.z}" step="0.1"></div>
                     ` : ''}
-                    <div class="control-group"><label>Max Ang. Momentum:</label><input type="number" class="attitude-input" data-type="${type}" data-index="${index}" data-property="maxAngularMomentum" value="${feature.maxAngularMomentum}" step="1"></div>
-                    <div class="control-group"><label>Max Torque:</label><input type="number" class="attitude-input" data-type="${type}" data-index="${index}" data-property="maxTorque" value="${feature.maxTorque}" step="0.1"></div>
+                    <div class="control-group"><label>Max Ang. Momentum (Nms):</label><input type="number" class="attitude-input" data-type="${type}" data-index="${index}" data-property="maxAngularMomentum" value="${feature.maxAngularMomentum}" step="1"></div>
+                    <div class="control-group"><label>Max Torque (Nm):</label><input type="number" class="attitude-input" data-type="${type}" data-index="${index}" data-property="maxTorque" value="${feature.maxTorque}" step="0.1"></div>
                 </div>
             `;
             return element;

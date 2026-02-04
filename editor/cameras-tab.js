@@ -92,7 +92,7 @@ export class CamerasTab extends FeatureManager {
         group.quaternion.setFromEuler(euler);
     }
 
-    updateVisual(index, feature) {
+    updateVisual(index, feature, oldFov = null) {
         if (index < 0 || index >= this.visuals.length) return;
         
         const visual = this.visuals[index];
@@ -102,8 +102,8 @@ export class CamerasTab extends FeatureManager {
         this.updateVisualTransform(visual.group, feature);
 
         // Update FOV cone if it changed
-        // Note: We compare the stored fov value, not the geometry parameter
-        if (this.features[index].fov !== feature.fov) {
+        // Use oldFov parameter if provided, otherwise compare with stored value
+        if (oldFov !== null ? oldFov !== feature.fov : this.features[index].fov !== feature.fov) {
             visual.fovCone.geometry.dispose(); // Clean up old geometry
             visual.fovCone.geometry = this.createFOVCone(feature.fov);
         }
@@ -126,6 +126,9 @@ export class CamerasTab extends FeatureManager {
         const feature = this.features[index];
         const numValue = parseFloat(value);
         
+        // Store old value for FOV to detect changes
+        const oldFov = feature.fov;
+        
         if (property.startsWith('position.')) {
             const axis = property.split('.')[1];
             feature.position[axis] = numValue;
@@ -136,8 +139,12 @@ export class CamerasTab extends FeatureManager {
             feature[property] = isNaN(numValue) ? value : numValue;
         }
         
-        // Update the visual representation
-        this.updateVisual(index, feature);
+        // Update the visual representation (pass oldFov if FOV changed)
+        if (property === 'fov') {
+            this.updateVisual(index, feature, oldFov);
+        } else {
+            this.updateVisual(index, feature);
+        }
         
         // Update spacecraft data
         this.updateSpacecraftData();
@@ -189,18 +196,18 @@ export class CamerasTab extends FeatureManager {
                             onchange="camerasTab.updateFeature(${index}, 'name', this.value)">
                     </div>
                     <div class="control-group">
-                        <label>Position X:</label>
-                        <input type="number" value="${camera.position.x}" step="0.1" 
+                        <label>Position X (m):</label>
+                        <input type="number" value="${camera.position.x}" step="0.01" 
                             oninput="camerasTab.updateFeature(${index}, 'position.x', this.value)">
                     </div>
                     <div class="control-group">
-                        <label>Position Y:</label>
-                        <input type="number" value="${camera.position.y}" step="0.1" 
+                        <label>Position Y (m):</label>
+                        <input type="number" value="${camera.position.y}" step="0.01" 
                             oninput="camerasTab.updateFeature(${index}, 'position.y', this.value)">
                     </div>
                     <div class="control-group">
-                        <label>Position Z:</label>
-                        <input type="number" value="${camera.position.z}" step="0.1" 
+                        <label>Position Z (m):</label>
+                        <input type="number" value="${camera.position.z}" step="0.01" 
                             oninput="camerasTab.updateFeature(${index}, 'position.z', this.value)">
                     </div>
                     <div class="control-group">

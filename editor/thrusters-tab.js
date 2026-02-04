@@ -2,6 +2,10 @@
 import * as THREE from 'three';
 import { FeatureManager } from './featureManager.js';
 
+// Auto-binding tolerances
+const TRANSLATION_ANGLE_DEGREES = 90-15;
+const TRANSLATION_TOLERANCE = Math.cos(TRANSLATION_ANGLE_DEGREES * Math.PI / 180);
+
 export class ThrustersTab extends FeatureManager {
     constructor(scene, spacecraftData) {
         super(scene, spacecraftData, 'thrusters-list', 'Thruster', 'thrusters.thrusters');
@@ -73,13 +77,13 @@ export class ThrustersTab extends FeatureManager {
         
         // Translation: thruster points mostly along one axis
         const dot = (a, b) => a.dot(b);
-        if (Math.abs(dot(dir, new THREE.Vector3(0, 0, 1))) > 0.7) {
+        if (Math.abs(dot(dir, new THREE.Vector3(0, 0, 1))) > TRANSLATION_TOLERANCE) {
             keys.push(dir.z > 0 ? 'w' : 's');
         }
-        if (Math.abs(dot(dir, new THREE.Vector3(1, 0, 0))) > 0.7) {
+        if (Math.abs(dot(dir, new THREE.Vector3(1, 0, 0))) > TRANSLATION_TOLERANCE) {
             keys.push(dir.x > 0 ? 'a' : 'd');
         }
-        if (Math.abs(dot(dir, new THREE.Vector3(0, 1, 0))) > 0.7) {
+        if (Math.abs(dot(dir, new THREE.Vector3(0, 1, 0))) > TRANSLATION_TOLERANCE) {
             keys.push(dir.y > 0 ? 'e' : 'q');
         }
         
@@ -87,17 +91,17 @@ export class ThrustersTab extends FeatureManager {
         const torque = new THREE.Vector3().crossVectors(pos, dir);
 
         // Pitch (rotation around X axis)
-        if (Math.abs(torque.x) > 0.1) {
+        if (Math.abs(torque.x) > 0.025) {
             keys.push(torque.x > 0 ? 'k' : 'i'); // pitch up/down
         }
 
         // Yaw (rotation around Y axis)
-        if (Math.abs(torque.y) > 0.1) {
+        if (Math.abs(torque.y) > 0.025) {
             keys.push(torque.y > 0 ? 'j' : 'l'); // yaw left/right
         }
 
         // Roll (rotation around Z axis)
-        if (Math.abs(torque.z) > 0.1) {
+        if (Math.abs(torque.z) > 0.025) {
             keys.push(torque.z > 0 ? 'o' : 'u'); // roll left/right
         }
         
@@ -249,6 +253,34 @@ export class ThrustersTab extends FeatureManager {
                (feature.autoBind && (property.startsWith('position') || property.startsWith('direction')));
     }
     
+    // Method to auto-bind all thrusters
+    autoBindAll() {
+        this.features.forEach((thruster, index) => {
+            const autoKeys = this.autoBindThruster(thruster);
+            if (autoKeys.length > 0) {
+                thruster.keybind = autoKeys;
+                thruster.autoBind = true;
+            }
+        });
+        
+        // Update spacecraft data and refresh UI
+        this.updateSpacecraftData();
+        this.updateFeaturesList();
+    }
+    
+    // Method to unbind all thrusters
+    unbindAll() {
+        this.features.forEach((thruster, index) => {
+            // Clear all keybinds and disable auto-bind
+            thruster.keybind = [];
+            thruster.autoBind = false;
+        });
+        
+        // Update spacecraft data and refresh UI
+        this.updateSpacecraftData();
+        this.updateFeaturesList();
+    }
+    
     updateFeaturesList() {
         const featuresContainer = document.getElementById(this.containerId);
         featuresContainer.innerHTML = '';
@@ -286,18 +318,18 @@ export class ThrustersTab extends FeatureManager {
                             ${thruster.autoBind ? 'readonly' : ''}>
                     </div>
                     <div class="control-group">
-                        <label>Position X:</label>
-                        <input type="number" value="${thruster.position[0]}" step="0.1" 
+                        <label>Position X (m):</label>
+                        <input type="number" value="${thruster.position[0]}" step="0.01" 
                             onchange="thrustersTab.updateFeature(${index}, 'position.0', this.value)">
                     </div>
                     <div class="control-group">
-                        <label>Position Y:</label>
-                        <input type="number" value="${thruster.position[1]}" step="0.1" 
+                        <label>Position Y (m):</label>
+                        <input type="number" value="${thruster.position[1]}" step="0.01" 
                             onchange="thrustersTab.updateFeature(${index}, 'position.1', this.value)">
                     </div>
                     <div class="control-group">
-                        <label>Position Z:</label>
-                        <input type="number" value="${thruster.position[2]}" step="0.1" 
+                        <label>Position Z (m):</label>
+                        <input type="number" value="${thruster.position[2]}" step="0.01" 
                             onchange="thrustersTab.updateFeature(${index}, 'position.2', this.value)">
                     </div>
                     <div class="control-group">
@@ -316,12 +348,12 @@ export class ThrustersTab extends FeatureManager {
                             onchange="thrustersTab.updateFeature(${index}, 'direction.2', this.value)">
                     </div>
                     <div class="control-group">
-                        <label>Thrust:</label>
+                        <label>Thrust (N):</label>
                         <input type="number" value="${thruster.thrust}" step="0.1" 
                             onchange="thrustersTab.updateFeature(${index}, 'thrust', this.value)">
                     </div>
                     <div class="control-group">
-                        <label>ISP:</label>
+                        <label>ISP (s):</label>
                         <input type="number" value="${thruster.isp}" step="0.1" 
                             onchange="thrustersTab.updateFeature(${index}, 'isp', this.value)">
                     </div>

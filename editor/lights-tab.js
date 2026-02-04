@@ -291,9 +291,9 @@ export class LightsTab extends FeatureManager {
                 </div>
                 <div class="feature-controls">
                     <div class="control-group"><label>Name:</label><input type="text" class="light-name-input" data-index="${index}" data-property="name" value="${light.name}"></div>
-                    <div class="control-group"><label>Position X:</label><input type="number" class="light-input" data-index="${index}" data-property="position.x" value="${light.position.x}" step="0.1"></div>
-                    <div class="control-group"><label>Position Y:</label><input type="number" class="light-input" data-index="${index}" data-property="position.y" value="${light.position.y}" step="0.1"></div>
-                    <div class="control-group"><label>Position Z:</label><input type="number" class="light-input" data-index="${index}" data-property="position.z" value="${light.position.z}" step="0.1"></div>
+                    <div class="control-group"><label>Position X (m):</label><input type="number" class="light-input" data-index="${index}" data-property="position.x" value="${light.position.x}" step="0.01"></div>
+                    <div class="control-group"><label>Position Y (m):</label><input type="number" class="light-input" data-index="${index}" data-property="position.y" value="${light.position.y}" step="0.01"></div>
+                    <div class="control-group"><label>Position Z (m):</label><input type="number" class="light-input" data-index="${index}" data-property="position.z" value="${light.position.z}" step="0.01"></div>
                     <div class="control-group"><label>Rotation X (deg):</label><input type="number" class="light-input" data-index="${index}" data-property="rotation.x" value="${rotationDegX}" step="1"></div>
                     <div class="control-group"><label>Rotation Y (deg):</label><input type="number" class="light-input" data-index="${index}" data-property="rotation.y" value="${rotationDegY}" step="1"></div>
                     <div class="control-group"><label>Rotation Z (deg):</label><input type="number" class="light-input" data-index="${index}" data-property="rotation.z" value="${rotationDegZ}" step="1"></div>
