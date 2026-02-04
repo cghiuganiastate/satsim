@@ -89,33 +89,48 @@ function processThrusterConfig(config, CANNON, satMesh, keyToThrusterIndices, cr
     }
     // --- END SANITIZATION ---
 
-    // ---------- AUTO-MAPPING ----------
-    // Translation: thruster points mostly along one axis
-    const dot = (a, b) => a.dot(b);
-    if (Math.abs(dot(dir, new CANNON.Vec3(0, 0, 1))) > TRANSLATION_TOLERANCE) keyToThrusterIndices[dir.z > 0 ? 'w' : 's'].push(i);
-    if (Math.abs(dot(dir, new CANNON.Vec3(1, 0, 0))) > TRANSLATION_TOLERANCE) keyToThrusterIndices[dir.x > 0 ? 'a' : 'd'].push(i);
-    if (Math.abs(dot(dir, new CANNON.Vec3(0, 1, 0))) > TRANSLATION_TOLERANCE) keyToThrusterIndices[dir.y > 0 ? 'e' : 'q'].push(i);
+    // ---------- KEYBIND MAPPING ----------
+    // Check if autoBind is enabled or use custom keybinds from JSON
+    const autoBind = t.autoBind === true; // Default to false if undefined
+    const customKeybinds = Array.isArray(t.keybind) ? t.keybind : [];
 
-    // Rotation: torque = r × F  (lever arm × direction)
-    const lever = pos;
-    const torque = lever.cross(dir);
+    if (autoBind) {
+      // Use auto-binding logic based on position and direction
+      const dot = (a, b) => a.dot(b);
+      if (Math.abs(dot(dir, new CANNON.Vec3(0, 0, 1))) > TRANSLATION_TOLERANCE) keyToThrusterIndices[dir.z > 0 ? 'w' : 's'].push(i);
+      if (Math.abs(dot(dir, new CANNON.Vec3(1, 0, 0))) > TRANSLATION_TOLERANCE) keyToThrusterIndices[dir.x > 0 ? 'a' : 'd'].push(i);
+      if (Math.abs(dot(dir, new CANNON.Vec3(0, 1, 0))) > TRANSLATION_TOLERANCE) keyToThrusterIndices[dir.y > 0 ? 'e' : 'q'].push(i);
 
-    // Pitch (rotation around X axis)
-    if (Math.abs(torque.x) > 0.025) {
-      if (torque.x > 0) keyToThrusterIndices['k'].push(i); // pitch up
-      else keyToThrusterIndices['i'].push(i); // pitch down
-    }
+      // Rotation: torque = r × F  (lever arm × direction)
+      const lever = pos;
+      const torque = lever.cross(dir);
 
-    // Yaw (rotation around Y axis)
-    if (Math.abs(torque.y) > 0.025) {
-      if (torque.y > 0) keyToThrusterIndices['j'].push(i); // yaw left
-      else keyToThrusterIndices['l'].push(i); // yaw right
-    }
+      // Pitch (rotation around X axis)
+      if (Math.abs(torque.x) > 0.025) {
+        if (torque.x > 0) keyToThrusterIndices['k'].push(i); // pitch up
+        else keyToThrusterIndices['i'].push(i); // pitch down
+      }
 
-    // Roll (rotation around Z axis)
-    if (Math.abs(torque.z) > 0.025) {
-      if (torque.z > 0) keyToThrusterIndices['o'].push(i); // roll left
-      else keyToThrusterIndices['u'].push(i); // roll right
+      // Yaw (rotation around Y axis)
+      if (Math.abs(torque.y) > 0.025) {
+        if (torque.y > 0) keyToThrusterIndices['j'].push(i); // yaw left
+        else keyToThrusterIndices['l'].push(i); // yaw right
+      }
+
+      // Roll (rotation around Z axis)
+      if (Math.abs(torque.z) > 0.025) {
+        if (torque.z > 0) keyToThrusterIndices['o'].push(i); // roll left
+        else keyToThrusterIndices['u'].push(i); // roll right
+      }
+    } else {
+      // Use custom keybinds from JSON
+      // If keybind array is empty, thruster remains unbound
+      customKeybinds.forEach(key => {
+        const normalizedKey = key.toLowerCase().trim();
+        if (normalizedKey && keyToThrusterIndices[normalizedKey]) {
+          keyToThrusterIndices[normalizedKey].push(i);
+        }
+      });
     }
     // ----------------------------------
 
