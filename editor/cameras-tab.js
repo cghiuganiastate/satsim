@@ -52,6 +52,7 @@ export class CamerasTab extends FeatureManager {
             opacity: 0.2,
             side: THREE.DoubleSide
         });
+        this.originalOpacity = 0.2; // Store original opacity for highlighting
         const fovConeGeometry = this.createFOVCone(feature.fov);
         const fovMesh = new THREE.Mesh(fovConeGeometry, fovMaterial);
         
@@ -119,6 +120,32 @@ export class CamerasTab extends FeatureManager {
         });
     }
     
+    // Highlight a camera visual
+    highlightCamera(index) {
+        if (index < 0 || index >= this.visuals.length) return;
+        const visual = this.visuals[index];
+        if (visual && visual.body) {
+            visual.body.material.emissive.setHex(0xffff00); // Bright yellow glow
+            visual.body.material.emissiveIntensity = 0.5;
+        }
+        if (visual && visual.fovCone) {
+            visual.fovMaterial.opacity = 0.6; // Make cone more visible
+        }
+    }
+    
+    // Unhighlight a camera visual
+    unhighlightCamera(index) {
+        if (index < 0 || index >= this.visuals.length) return;
+        const visual = this.visuals[index];
+        if (visual && visual.body) {
+            visual.body.material.emissive.setHex(0x000000); // Turn off glow
+            visual.body.material.emissiveIntensity = 1.0;
+        }
+        if (visual && visual.fovCone) {
+            visual.fovMaterial.opacity = this.originalOpacity || 0.2; // Restore original opacity
+        }
+    }
+    
     // Override updateFeature to handle nested properties correctly
     updateFeature(index, property, value) {
         if (index < 0 || index >= this.features.length) return;
@@ -176,6 +203,15 @@ export class CamerasTab extends FeatureManager {
         this.features.forEach((camera, index) => {
             const cameraElement = document.createElement('div');
             cameraElement.className = 'feature-item';
+            cameraElement.style.cursor = 'pointer';
+            
+            // Add hover event listeners
+            cameraElement.addEventListener('mouseenter', () => {
+                this.highlightCamera(index);
+            });
+            cameraElement.addEventListener('mouseleave', () => {
+                this.unhighlightCamera(index);
+            });
             
             const rotationDegX = THREE.MathUtils.radToDeg(camera.rotation.x);
             const rotationDegY = THREE.MathUtils.radToDeg(camera.rotation.y);
