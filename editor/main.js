@@ -238,9 +238,50 @@ function setupEventListeners() {
         const file = files[0];
         const fileExtension = file.name.split('.').pop().toLowerCase();
         
+        // Check if it's an STL file
+        if (fileExtension === 'stl') {
+            // Load STL file
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                try {
+                    const loader = new STLLoader();
+                    const geometry = loader.parse(event.target.result);
+                    
+                    // Create material for the STL mesh
+                    const material = new THREE.MeshPhongMaterial({ 
+                        color: 0x888888,
+                        specular: 0x111111,
+                        shininess: 200
+                    });
+                    
+                    // Remove existing model if any
+                    if (spacecraftModel) {
+                        scene.remove(spacecraftModel);
+                    }
+                    
+                    // Create mesh and add to scene (no centering)
+                    spacecraftModel = new THREE.Mesh(geometry, material);
+                    scene.add(spacecraftModel);
+                    
+                    // Apply scale if enabled
+                    applyScaleToModel();
+                    
+                    // Update model tab with new model
+                    modelTab.setModel(spacecraftModel);
+                    
+                    // Show notification
+                    showNotification('STL model imported successfully!');
+                } catch (error) {
+                    showNotification('Error loading STL file: ' + error.message, 'error');
+                }
+            };
+            reader.readAsArrayBuffer(file);
+            return;
+        }
+        
         // Check if it's a JSON file
         if (fileExtension !== 'json') {
-            showNotification('Please drop a JSON file!', 'error');
+            showNotification('Please drop a JSON or STL file!', 'error');
             return;
         }
         
