@@ -65,7 +65,27 @@ export class ThrustersTab extends FeatureManager {
         mesh.quaternion.copy(q);
         mesh.rotateX(Math.PI);
         group.add(mesh);
-        return {group, material:mat};
+        return {group, material:mat, mesh:mesh};
+    }
+    
+    // Highlight a thruster visual
+    highlightThruster(index) {
+        if (index < 0 || index >= this.visuals.length) return;
+        const visual = this.visuals[index];
+        if (visual && visual.material) {
+            visual.material.emissive.setHex(0xffff00); // Bright yellow glow
+            visual.material.emissiveIntensity = 1.0;
+        }
+    }
+    
+    // Unhighlight a thruster visual
+    unhighlightThruster(index) {
+        if (index < 0 || index >= this.visuals.length) return;
+        const visual = this.visuals[index];
+        if (visual && visual.material) {
+            visual.material.emissive.setHex(0x000000); // Turn off glow
+            visual.material.emissiveIntensity = 1.0;
+        }
     }
     
     // Auto-binding logic that returns an array of keys
@@ -288,6 +308,15 @@ export class ThrustersTab extends FeatureManager {
         this.features.forEach((thruster, index) => {
             const thrusterElement = document.createElement('div');
             thrusterElement.className = 'feature-item';
+            thrusterElement.style.cursor = 'pointer';
+            
+            // Add hover event listeners
+            thrusterElement.addEventListener('mouseenter', () => {
+                this.highlightThruster(index);
+            });
+            thrusterElement.addEventListener('mouseleave', () => {
+                this.unhighlightThruster(index);
+            });
             
             // Convert keybind array to comma-separated string for display
             const keybindString = thruster.keybind.join(', ');
