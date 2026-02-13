@@ -189,9 +189,8 @@ export class AttitudeTab extends FeatureManager {
             this.rwVisuals.splice(index, 1);
         } else {
             if (index < 0 || index >= this.cmgs.length) return;
-            this.scene.remove(this.cmgVisuals[index].arrow);
+            // CMGs don't have visual representations, so just remove from the data array
             this.cmgs.splice(index, 1);
-            this.cmgVisuals.splice(index, 1);
         }
         
         this.updateSpacecraftData();
