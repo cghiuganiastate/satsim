@@ -73,7 +73,7 @@ function initSimulation() {
   let fineControlProcessedKeys = {};
   let fineControlKeyStartTimes = {};
   let timedFiringEnabled = false;
-  let firingDuration = 0.1;
+  let firingDuration = 5.0;
   let torquePercentage = 50; // Percentage of max torque to use (1-100)
   
   let initialPosition = new CANNON.Vec3(0, -3, 5.5);
@@ -221,6 +221,10 @@ function initSimulation() {
         z: satBody.inertia.z
       });
       
+      // Get centerOfMass offset from the body
+      const centerOfMassOffset = satBody.centerOfMassOffset || {x: 0, y: 0, z: 0};
+      console.log("DEBUG: Center of mass offset:", centerOfMassOffset);
+      
       window.satBody = satBody;
       window.satMesh = satMesh;
       
@@ -228,6 +232,9 @@ function initSimulation() {
       satBody.quaternion.copy(initialOrientation);
       satMesh.position.copy(initialPosition);
       satMesh.quaternion.copy(initialOrientation);
+      
+      // Store centerOfMass in spacecraft mesh for cameras to access
+      satMesh.userData.centerOfMassOffset = centerOfMassOffset;
       
       // Ensure velocity and angular velocity are zero at start
       satBody.velocity.set(0, 0, 0);
@@ -238,8 +245,10 @@ function initSimulation() {
       
       attitudeControl = new AttitudeControlSystem(satBody, scene);
       attitudeControl.setSatelliteMesh(satMesh);
+      attitudeControl.setCenterOfMassOffset(centerOfMassOffset);
       
       lampManager = new LampManager(scene, satMesh);
+      lampManager.setCenterOfMassOffset(centerOfMassOffset);
 
       // Load docking port
       loadDockingPort();
@@ -667,9 +676,56 @@ function createDockingPort(geometry) {
     }
     
     if (firingDurationSlider && firingDurationValue) {
+      // Function to convert slider value (0-100) to actual duration (0-15 seconds)
+      // 80% of slider (0-80) maps to 0-2 seconds
+      // 20% of slider (80-100) maps to 2-15 seconds
+      function sliderToDuration(sliderValue) {
+        const value = parseFloat(sliderValue);
+        if (value <= 80) {
+          // 0-2 seconds range with fine control
+          return (value / 80) * 2;
+        } else {
+          // 2-15 seconds range
+          return 2 + ((value - 80) / 20) * 13;
+        }
+      }
+      
+      // Function to convert duration (0-15 seconds) back to slider value (0-100)
+      function durationToSlider(duration) {
+        if (duration <= 2) {
+          // Map 0-2 seconds back to 0-80
+          return (duration / 2) * 80;
+        } else {
+          // Map 2-15 seconds back to 80-100
+          return 80 + ((duration - 2) / 13) * 20;
+        }
+      }
+      
+      // Function to snap duration to appropriate increment based on range
+      function snapDuration(duration) {
+        if (duration <= 2) {
+          // Snap to 0.01 increments for small scale
+          return Math.round(duration * 100) / 100;
+        } else {
+          // Snap to 0.1 increments for large scale
+          return Math.round(duration * 10) / 10;
+        }
+      }
+      
+      // Set initial slider value to correspond to 1 second
+      const initialSliderValue = durationToSlider(1.0);
+      firingDurationSlider.value = initialSliderValue;
+      firingDuration = 1.0;
+      firingDurationValue.textContent = firingDuration.toFixed(2);
+      
       firingDurationSlider.addEventListener('input', (e) => {
-        firingDuration = parseFloat(e.target.value);
-        firingDurationValue.textContent = firingDuration.toFixed(2);
+        let duration = sliderToDuration(e.target.value);
+        // Snap to appropriate increment
+        duration = snapDuration(duration);
+        // Update slider position to reflect snapped value
+        firingDurationSlider.value = durationToSlider(duration);
+        firingDuration = duration;
+        firingDurationValue.textContent = duration.toFixed(2);
       });
     }
     
@@ -681,9 +737,12 @@ function createDockingPort(geometry) {
       });
     }
     
-    try {
+      try {
+      // Get centerOfMass offset from spacecraft body
+      const centerOfMassOffset = satBody.centerOfMassOffset || {x: 0, y: 0, z: 0};
+      
       // Initialize all systems with the combined configuration
-      thrusters = await initializeThrustersWithConfig(config.thrusters, CANNON, satMesh, keyToThrusterIndices, createThrusterVisual);
+      thrusters = await initializeThrustersWithConfig(config.thrusters, CANNON, satMesh, keyToThrusterIndices, createThrusterVisual, centerOfMassOffset);
       
       // Load hulls from the JSON file
       loadConvexHulls(CONVEX_HULLS_PATH, scene, world);
@@ -716,10 +775,27 @@ function createDockingPort(geometry) {
   }
 
   const clock = new THREE.Clock();
+  
+  // FPS limiting variables
+  const TARGET_FPS = 60;
+  const FRAME_DURATION = 1000 / TARGET_FPS;
+  let lastFrameTime = performance.now();
+  
   function animate(){
     requestAnimationFrame(animate);
-    const dt = clock.getDelta();
+    
+    // FPS limiting - only update at target FPS
     const currentTime = performance.now();
+    const elapsed = currentTime - lastFrameTime;
+    
+    if (elapsed < FRAME_DURATION) {
+      return; // Skip this frame if not enough time has passed
+    }
+    
+    // Update last frame time, accounting for any excess to maintain steady frame rate
+    lastFrameTime = currentTime - (elapsed % FRAME_DURATION);
+    
+    const dt = clock.getDelta();
     
     // Handle timed firing: check if any keys have exceeded their firing duration
     if (fineControlMode && timedFiringEnabled) {
