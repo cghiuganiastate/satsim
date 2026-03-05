@@ -158,10 +158,13 @@ function initSimulation() {
   // Helper function to get spacecraft model
   async function getSpacecraftModel() {
     if (window.uploadedFiles && window.uploadedFiles.spacecraftModel) {
-      console.log('Using uploaded spacecraft model');
+      console.log('Using uploaded spacecraft model - centroiding disabled');
       // Create a File object from the uploaded model data
       const blob = new Blob([window.uploadedFiles.spacecraftModel], { type: 'model/stl' });
-      return new File([blob], 'custom.stl', { type: 'model/stl' });
+      return { 
+        file: new File([blob], 'custom.stl', { type: 'model/stl' }), 
+        isDefault: false 
+      };
     }
     
     // Load default model
@@ -171,7 +174,11 @@ function initSimulation() {
         throw new Error(`Failed to fetch default model: ${response.statusText}`);
       }
       const blob = await response.blob();
-      return new File([blob], DEFAULT_MODEL_PATH, { type: 'model/stl' });
+      console.log('Using default spacecraft model - centroiding enabled');
+      return { 
+        file: new File([blob], DEFAULT_MODEL_PATH, { type: 'model/stl' }), 
+        isDefault: true 
+      };
     } catch (error) {
       console.error('Error loading default model:', error);
       throw error;
@@ -180,7 +187,11 @@ function initSimulation() {
 
   async function initializeDefaultSpacecraft() {
     const config = await getConfiguration();
-    const modelFile = await getSpacecraftModel();
+    const modelData = await getSpacecraftModel();
+    const modelFile = modelData.file;
+    
+    // Use centroiding only for default model, not for uploaded models
+    const centroidModel = modelData.isDefault;
     
     // DEBUG: Log the loaded configuration
     console.log("DEBUG: Configuration loaded:", config);
@@ -208,7 +219,6 @@ function initSimulation() {
     }
 
     const rotation = { x: 0, y: 0, z: 0 };
-    const centroidModel = true;
 
     loadSpacecraft(modelFile, scene, world, rotation, centroidModel, config.spacecraftProperties, (body, mesh) => {
       satBody = body;
@@ -358,7 +368,43 @@ function createDockingPort(geometry) {
   dirLight.position.set(-10,-2,-1);
   scene.add(dirLight);
   scene.add(new THREE.AxesHelper(5));
-
+  // Add eye chart to the scene
+  const textureLoader = new THREE.TextureLoader();
+  textureLoader.load('eyechart.png', (texture) => {
+    // Get the aspect ratio of the image
+    const aspectRatio = texture.image.width / texture.image.height;
+    
+    // Set the longer dimension to 0.5m
+    let width, height;
+    if (aspectRatio > 1) {
+      // Image is wider than tall
+      width = 0.5;
+      height = 0.5 / aspectRatio;
+    } else {
+      // Image is taller than wide (typical eye chart)
+      height = 0.5;
+      width = 0.5 * aspectRatio;
+    }
+    
+    // Create plane geometry with calculated dimensions
+    const eyeChartGeometry = new THREE.PlaneGeometry(width, height);
+    const eyeChartMaterial = new THREE.MeshStandardMaterial({ 
+      map: texture,
+      side: THREE.DoubleSide,
+      metalness: 0,
+      roughness: 1
+    });
+    const eyeChartMesh = new THREE.Mesh(eyeChartGeometry, eyeChartMaterial);
+    
+    // Position the eye chart
+    eyeChartMesh.position.set(0, 0, 15);
+    
+    // Explicitly set rotation to face +z direction
+    eyeChartMesh.rotation.set(0, 0, 0);
+    
+    scene.add(eyeChartMesh);
+    console.log('Eye chart added to scene:', { width, height, position: eyeChartMesh.position });
+  });
   let thrusters = [];
   const keyToThrusterIndices = { w:[],s:[],a:[],d:[],q:[],e:[],i:[],k:[],j:[],l:[],u:[],o:[] };
 
@@ -525,6 +571,16 @@ function createDockingPort(geometry) {
   }
   let paused = true; // Start paused so spacecraft stays docked
 
+  let specialThrusterModeEnabled = false;
+  let disabledThrusterIndex = -1;
+  let specialThrusterModeTriggered = false;
+
+  function checkSpecialThrusterModeDate() {
+    const activationDate = new Date('2026-03-08T00:00:00');
+    const currentDate = new Date();
+    return currentDate >= activationDate;
+  }
+
   function resetSimulation(){
     if (!satBody || !satMesh) return;
     
@@ -547,7 +603,8 @@ function createDockingPort(geometry) {
     }
     
     if (lampManager) {
-      lampManager.toggleLamps();
+      lampManager.lampsVisible = true;
+      lampManager.lights.forEach(light => light.visible = true);
       updateUIText('lamp-status-text', 'ON');
       lampManager.helpersVisible = false;
       lampManager.lampHelpers.forEach(helper => helper.visible = false);
@@ -558,6 +615,11 @@ function createDockingPort(geometry) {
       t.active = false;
       t.material.emissive.setHex(0x000000);
     });
+    
+  
+    specialThrusterModeEnabled = checkSpecialThrusterModeDate();
+    disabledThrusterIndex = -1;
+    specialThrusterModeTriggered = false;
     
     // Reset clock when simulation is reset - reset to docked state
     isDocked = true;
@@ -820,6 +882,32 @@ function createDockingPort(geometry) {
       lastInertiaDebugTime = currentTime;
     }
     
+    if (!specialThrusterModeEnabled && checkSpecialThrusterModeDate()) {
+      specialThrusterModeEnabled = true;
+    }
+    //specialThrusterModeEnabled = true;
+    
+    // Check if spacecraft z position is < 2 and trigger special thruster mode
+    if (specialThrusterModeEnabled && !specialThrusterModeTriggered && satBody && satBody.position.z < 2) {
+      // Find thrusters facing -z direction using dot product
+      const negativeZDirection = new CANNON.Vec3(0, 0, -1);
+      const thrustersFacingNegativeZ = [];
+      
+      thrusters.forEach((thruster, index) => {
+        const dotProduct = thruster.dir.dot(negativeZDirection);
+        if (dotProduct > 0) {
+          thrustersFacingNegativeZ.push({ index, thruster, dotProduct });
+        }
+      });
+      
+      // Randomly select one of the thrusters facing -z
+      if (thrustersFacingNegativeZ.length > .707) {
+        const randomIndex = Math.floor(Math.random() * thrustersFacingNegativeZ.length);
+        disabledThrusterIndex = thrustersFacingNegativeZ[randomIndex].index;
+        specialThrusterModeTriggered = true;
+      }
+    }
+    
     if (!paused && satBody){
       if (attitudeControl && attitudeControl.loaded && attitudeControl.mode !== 'thrusters') {
         const torque = new CANNON.Vec3(0, 0, 0);
@@ -867,6 +955,8 @@ function createDockingPort(geometry) {
           if (keyIsPressed && indices.length && !['w','s','a','d','q','e'].includes(key)) {
             indices.forEach(i => {
               const t = thrusters[i]; if (!t) return;
+              // Skip if thruster is disabled by special thruster mode
+              if (specialThrusterModeTriggered && i === disabledThrusterIndex) return;
               const fuelStatus = getFuelStatus();
               if (fuelStatus.fuelMass <= 0) { if (t.active) { t.active = false; t.material.emissive.setHex(0x000000); } return; }
               if (!t.thrust || !t.isp || t.isp <= 0 || isNaN(t.thrust) || isNaN(t.isp)) { console.error("Thruster has invalid properties, skipping.", t); if (t.active) { t.active = false; t.material.emissive.setHex(0x000000); } return; }
@@ -892,6 +982,8 @@ function createDockingPort(geometry) {
         if (keyIsPressed && indices.length && ['w','s','a','d','q','e'].includes(key)) {
           indices.forEach(i => {
             const t = thrusters[i]; if (!t) return;
+            // Skip if thruster is disabled by special thruster mode
+            if (specialThrusterModeTriggered && i === disabledThrusterIndex) return;
             const fuelStatus = getFuelStatus();
             if (fuelStatus.fuelMass <= 0) { if (t.active) { t.active = false; t.material.emissive.setHex(0x000000); } return; }
             if (!t.thrust || !t.isp || t.isp <= 0 || isNaN(t.thrust) || isNaN(t.isp)) { console.error("Thruster has invalid properties, skipping.", t); if (t.active) { t.active = false; t.material.emissive.setHex(0x000000); } return; }

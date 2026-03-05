@@ -4,10 +4,10 @@
       "id": "white_z",
       "position": { "x": 0, "y": 0, "z": 0.5 },
       "rotation": { "x": 3.14159, "y": 0, "z": 0 },
-      "intensity": 1.0,
+      "intensity": 5.0,
       "angle": 0.7854,
       "color": "#ffffff",
-      "distance": 20,
+      "distance": 50,
       "penumbra": 0.2
     },
     {
