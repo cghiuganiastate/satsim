@@ -105,6 +105,7 @@ function initSimulation() {
   // --- Second spacecraft (static target) variables ---
   let secondSpacecraftBody = null;
   let secondSpacecraftMesh = null;
+  let secondSpacecraftBoundingBoxMesh = null;
   let secondSpacecraftLoaded = false;
 
   // Docking zones registry — each entry: { position, orientation, dockingBoxSize, dockingAngleThreshold, name }
@@ -449,6 +450,20 @@ function createDockingPort(geometry) {
       body.addShape(shape);
       world.addBody(body);
       secondSpacecraftBody = body;
+
+      // Create visual bounding box wireframe (same style as primary spacecraft)
+      const bboxGeometry = new THREE.BoxGeometry(size.x, size.y, size.z);
+      const bboxMaterial = new THREE.MeshBasicMaterial({
+        color: 0x00ff00,
+        transparent: true,
+        opacity: 0.2,
+        wireframe: true
+      });
+      secondSpacecraftBoundingBoxMesh = new THREE.Mesh(bboxGeometry, bboxMaterial);
+      secondSpacecraftBoundingBoxMesh.visible = false;
+      // Position the bounding box at the same offset as the mesh
+      secondSpacecraftBoundingBoxMesh.position.copy(pos).add(center);
+      scene.add(secondSpacecraftBoundingBoxMesh);
 
       // Helpful axes
       const axes = new THREE.AxesHelper(2);
@@ -879,6 +894,11 @@ scene.add(new THREE.AmbientLight(0x111111));
       }
 
       toggleSpacecraftBoundingBoxVisibility(showHulls);
+
+      // Also toggle the second spacecraft bounding box
+      if (secondSpacecraftBoundingBoxMesh) {
+        secondSpacecraftBoundingBoxMesh.visible = showHulls;
+      }
     }
     if (backtickPressed && k === 'x') {
       showDistanceInfo = !showDistanceInfo;
