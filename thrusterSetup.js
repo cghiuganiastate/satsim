@@ -141,7 +141,7 @@ function processThrusterConfig(config, CANNON, satMesh, keyToThrusterIndices, cr
     // ----------------------------------
 
     // Return sanitized thruster object
-    return { pos, dir, thrust, isp, visual, material, active: false, index: i };
+    return { pos, dir, thrust, isp, visual, material, active: false, index: i, name: t.name || `Thruster ${i + 1}` };
   });
 
   return thrusters;

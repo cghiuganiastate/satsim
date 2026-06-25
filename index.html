@@ -120,6 +120,26 @@
     #controls { position: absolute; bottom: 10px; left: 10px; background: rgba(0,0,0,0.7); color: #fff; padding: 10px; border-radius: 5px; font-size: 12px; }
     #hull-info { position: absolute; right: 10px; top: 10px; background: rgba(0,0,0,0.7); color: #0f0; padding: 10px; border-radius: 5px; font-size: 12px; width: 200px; }
     #distance-info { position: absolute; left: 10px; top: 520px; background: rgba(0,0,0,0.7); color: #0ff; padding: 10px; border-radius: 5px; font-size: 12px; width: 260px; display: none; }
+    #controller-panel { position: absolute; right: 10px; bottom: 10px; background: rgba(0,0,0,0.78); color: #0f0; padding: 10px; border-radius: 5px; font-size: 12px; width: 430px; max-height: 72vh; z-index: 120; }
+    #controller-code { width: 100%; height: 260px; box-sizing: border-box; background: #050505; color: #0f0; border: 1px solid #333; font-family: monospace; font-size: 11px; resize: vertical; }
+    #controller-output { width: 100%; height: 110px; box-sizing: border-box; background: #050505; color: #0ff; border: 1px solid #333; font-family: monospace; font-size: 11px; resize: vertical; margin-top: 6px; }
+    #controller-input { width: 100%; box-sizing: border-box; background: #111; color: #fff; border: 1px solid #333; font-family: monospace; font-size: 11px; margin-top: 4px; }
+    .controller-row { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
+    .controller-row button { padding: 3px 8px; background: #222; color: #eee; border: 1px solid #555; cursor: pointer; }
+    .controller-row button:hover { background: #333; }
+    #thruster-menu { position: absolute; right: 10px; top: 10px; background: rgba(0,0,0,0.78); color: #eee; padding: 8px; border-radius: 5px; font-size: 12px; width: 230px; max-height: 45vh; z-index: 130; }
+    .thruster-menu-header { display: flex; justify-content: space-between; align-items: center; color: #0f0; font-weight: bold; cursor: pointer; user-select: none; }
+     #thruster-menu-toggle { background: #222; color: #0f0; border: 1px solid #555; cursor: pointer; width: 24px; height: 22px; line-height: 18px; padding: 0; }
+     #thruster-menu-body { margin-top: 8px; max-height: calc(45vh - 42px); overflow-y: auto; }
+     .controller-menu-header { display: flex; justify-content: space-between; align-items: center; color: #0f0; font-weight: bold; cursor: pointer; user-select: none; padding-bottom: 6px; }
+     #controller-menu-toggle { background: #222; color: #0f0; border: 1px solid #555; cursor: pointer; width: 24px; height: 22px; line-height: 18px; padding: 0; }
+     #controller-menu-body { margin-top: 8px; }
+    .thruster-menu-row { display: flex; align-items: center; gap: 6px; padding: 3px 2px; border-radius: 3px; }
+    .thruster-menu-row:hover { background: rgba(255,255,255,0.12); }
+    .thruster-menu-row.special-disabled { color: #f66; opacity: 0.8; }
+    .thruster-menu-row input { margin: 0; }
+    .thruster-menu-row label { flex: 1; cursor: pointer; }
+    .thruster-menu-note { color: #aaa; font-size: 10px; margin-top: 6px; }
     .fuel-bar-container { width: 100%; height: 20px; background-color: #333; border-radius: 5px; margin-top: 5px; }
     .fuel-bar { height: 100%; background-color: #0f0; border-radius: 5px; transition: width 0.3s; }
     .momentum-bar-container { width: 100%; height: 12px; background-color: #333; border-radius: 3px; margin-top: 2px; }
@@ -330,9 +350,6 @@
           <div style="font-size: 10px;">CMGs:</div>
           <div id="cmg-list"></div>
         </div>
-        <div id="desaturation-status" style="display: none; margin-top: 5px; color: #ff0;">
-          Desaturation Active
-        </div>
       </div>
       
       <div class="status-section">
@@ -372,6 +389,45 @@
     <div id="hull-info">
       <div id="hull-status">Loading Navion...</div>
       <div id="hull-count">Hull Count: 0</div>
+    </div>
+    <div id="thruster-menu">
+      <div class="thruster-menu-header" id="thruster-menu-header">
+        <span>Thrusters</span>
+        <button id="thruster-menu-toggle" type="button" aria-label="Minimize thruster menu">−</button>
+      </div>
+      <div id="thruster-menu-body">
+        <div id="thruster-menu-list">Loading thrusters...</div>
+        <div class="thruster-menu-note">Unchecked thrusters will not fire.</div>
+      </div>
+    </div>
+    <div id="controller-panel">
+      <div class="controller-menu-header" id="controller-menu-header">
+        <span>Autopilot Controller</span>
+        <button id="controller-menu-toggle" type="button" aria-label="Minimize controller menu">−</button>
+      </div>
+      <div id="controller-menu-body">
+        <div class="controller-row">
+          <button id="controller-apply">Apply Code</button>
+          <button id="controller-clear-output">Clear Output</button>
+          <label><input type="checkbox" id="controller-enabled"> Enabled</label>
+          <span>Status: <span id="controller-status" style="color:#f66;">OFF</span></span>
+        </div>
+        <div class="controller-row">
+          <button id="controller-export">Export Program</button>
+          <button id="controller-load">Load Program</button>
+          <input type="file" id="controller-load-file" accept=".js,.txt" style="display: none;">
+        </div>
+        <div id="controller-drop-zone" style="display: none; border: 2px dashed #0f0; border-radius: 5px; padding: 10px; margin: 5px 0; text-align: center; color: #0f0; font-size: 12px; background: rgba(0, 255, 0, 0.1);">
+          Drop a program file here to load
+        </div>
+        <textarea id="controller-code" spellcheck="false"></textarea>
+        <label for="controller-input" style="display:block; margin-top:6px; color:#0ff;">Input text available as inputs.text:</label>
+        <input id="controller-input" type="text" value="hello spacecraft">
+        <textarea id="controller-output" readonly spellcheck="false"></textarea>
+        <div style="color:#aaa; font-size:10px; margin-top:4px;">
+          Cooperative mode: manual W/S/A/D/Q/E/I/K/J/L/U/O input and controller output are applied together.
+        </div>
+      </div>
     </div>
   </div>
 

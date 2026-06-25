@@ -25,6 +25,7 @@ import {
 } from './spacecraftManager.js';
 import { AttitudeControlSystem } from './attitudeControl.js';
 import { LampManager } from './lampManager.js';
+import { StudentController } from './controller.js';
 
 // Wait for the startSimulation event before initializing
 window.addEventListener('startSimulation', () => {
@@ -59,6 +60,7 @@ function initSimulation() {
   let satMesh;
   let camSys;
   let attitudeControl;
+  let studentController;
   let lampManager;
   let station;
   let defaultProperties = null;
@@ -275,6 +277,7 @@ function initSimulation() {
       attitudeControl = new AttitudeControlSystem(satBody, scene);
       attitudeControl.setSatelliteMesh(satMesh);
       attitudeControl.setCenterOfMassOffset(centerOfMassOffset);
+      studentController = new StudentController({ satBody });
       
       lampManager = new LampManager(scene, satMesh);
       lampManager.setCenterOfMassOffset(centerOfMassOffset);
@@ -628,6 +631,8 @@ scene.add(new THREE.AmbientLight(0x111111));
   });
   let thrusters = [];
   const keyToThrusterIndices = { w:[],s:[],a:[],d:[],q:[],e:[],i:[],k:[],j:[],l:[],u:[],o:[] };
+  const userDisabledThrusterIndices = new Set();
+  let highlightedThrusterIndex = null;
 
   window.thrusters = thrusters;
   window.keyToThrusterIndices = keyToThrusterIndices;
@@ -648,6 +653,139 @@ scene.add(new THREE.AmbientLight(0x111111));
     return {group, material:mat};
   }
   window.createThrusterVisual = createThrusterVisual;
+
+  function getThrusterBaseEmissive(thruster) {
+    return thruster?.active ? 0xff5500 : 0x000000;
+  }
+
+  function setThrusterEmissive(thruster, color) {
+    if (thruster?.material?.emissive) thruster.material.emissive.setHex(color);
+  }
+
+  function isSpecialDisabledThruster(index) {
+    return specialThrusterModeTriggered && index === disabledThrusterIndex;
+  }
+
+  function isThrusterDisabled(index) {
+    return userDisabledThrusterIndices.has(index) || isSpecialDisabledThruster(index);
+  }
+
+  function setThrusterActive(thruster, active) {
+    if (!thruster) return;
+    thruster.active = !!active;
+    if (thruster.index !== highlightedThrusterIndex) {
+      setThrusterEmissive(thruster, getThrusterBaseEmissive(thruster));
+    }
+  }
+
+  function highlightThruster(index) {
+    if (highlightedThrusterIndex !== null && highlightedThrusterIndex !== index) {
+      unhighlightThruster(highlightedThrusterIndex);
+    }
+    const thruster = thrusters[index];
+    if (!thruster) return;
+    highlightedThrusterIndex = index;
+    setThrusterEmissive(thruster, 0xffff00);
+  }
+
+  function unhighlightThruster(index) {
+    const thruster = thrusters[index];
+    if (thruster) setThrusterEmissive(thruster, getThrusterBaseEmissive(thruster));
+    if (highlightedThrusterIndex === index) highlightedThrusterIndex = null;
+  }
+
+  function updateThrusterMenuSpecialStates() {
+    thrusters.forEach((thruster, index) => {
+      const checkbox = document.getElementById(`thruster-enabled-${index}`);
+      const row = document.getElementById(`thruster-menu-row-${index}`);
+      if (!checkbox || !row) return;
+      const specialDisabled = isSpecialDisabledThruster(index);
+      checkbox.disabled = specialDisabled;
+      if (specialDisabled) {
+        checkbox.checked = false;
+        setThrusterActive(thruster, false);
+      } else {
+        checkbox.checked = !userDisabledThrusterIndices.has(index);
+      }
+      row.classList.toggle('special-disabled', specialDisabled);
+      row.title = specialDisabled ? 'Disabled by special mode; this menu cannot re-enable it.' : 'Hover to highlight this thruster in the scene.';
+    });
+  }
+
+  function initializeControllerMenu() {
+    const header = document.getElementById('controller-menu-header');
+    const toggle = document.getElementById('controller-menu-toggle');
+    const body = document.getElementById('controller-menu-body');
+    if (!header || !toggle || !body) return;
+
+    const setCollapsed = (collapsed) => {
+      body.style.display = collapsed ? 'none' : 'block';
+      toggle.textContent = collapsed ? '+' : '−';
+      toggle.setAttribute('aria-label', collapsed ? 'Expand controller menu' : 'Minimize controller menu');
+    };
+    header.addEventListener('click', () => {
+      setCollapsed(body.style.display !== 'none');
+    });
+  }
+
+  function initializeThrusterMenu() {
+    const menu = document.getElementById('thruster-menu');
+    const header = document.getElementById('thruster-menu-header');
+    const toggle = document.getElementById('thruster-menu-toggle');
+    const body = document.getElementById('thruster-menu-body');
+    const list = document.getElementById('thruster-menu-list');
+    if (!menu || !header || !toggle || !body || !list) return;
+
+    const setCollapsed = (collapsed) => {
+      body.style.display = collapsed ? 'none' : 'block';
+      toggle.textContent = collapsed ? '+' : '−';
+      toggle.setAttribute('aria-label', collapsed ? 'Expand thruster menu' : 'Minimize thruster menu');
+    };
+    header.addEventListener('click', (event) => {
+      event.stopPropagation();
+      setCollapsed(body.style.display !== 'none');
+    });
+
+    list.innerHTML = '';
+    if (thrusters.length === 0) {
+      list.textContent = 'No thrusters configured.';
+      return;
+    }
+
+    thrusters.forEach((thruster, index) => {
+      const row = document.createElement('div');
+      row.className = 'thruster-menu-row';
+      row.id = `thruster-menu-row-${index}`;
+
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.id = `thruster-enabled-${index}`;
+      checkbox.checked = true;
+      checkbox.addEventListener('change', () => {
+        if (isSpecialDisabledThruster(index)) {
+          checkbox.checked = false;
+          return;
+        }
+        if (checkbox.checked) userDisabledThrusterIndices.delete(index);
+        else {
+          userDisabledThrusterIndices.add(index);
+          setThrusterActive(thruster, false);
+        }
+      });
+
+      const label = document.createElement('label');
+      label.htmlFor = checkbox.id;
+      label.textContent = thruster.name || `Thruster ${index + 1}`;
+
+      row.addEventListener('mouseenter', () => highlightThruster(index));
+      row.addEventListener('mouseleave', () => unhighlightThruster(index));
+      row.appendChild(checkbox);
+      row.appendChild(label);
+      list.appendChild(row);
+    });
+
+    updateThrusterMenuSpecialStates();
+  }
 
   const keys = {};               
   let backtickPressed = false;
@@ -777,9 +915,6 @@ scene.add(new THREE.AmbientLight(0x111111));
         updateUIText('lamp-status-text', lampsVisible ? 'ON' : 'OFF');
       }
     }
-    if (k === 'g' && attitudeControl && attitudeControl.loaded) {
-      attitudeControl.desaturateWithThrusters(thrusters, keyToThrusterIndices);
-    }
   });
 
   document.addEventListener('keyup', e => {
@@ -798,8 +933,7 @@ scene.add(new THREE.AmbientLight(0x111111));
     satBody.angularVelocity.set(0,0,0);
     thrusters.forEach(t => {
       if (t.active) {
-        t.active = false;
-        t.material.emissive.setHex(0x000000);
+        setThrusterActive(t, false);
       }
     });
   }
@@ -810,7 +944,7 @@ scene.add(new THREE.AmbientLight(0x111111));
   let specialThrusterModeTriggered = false;
 
   function checkSpecialThrusterModeDate() {
-    const activationDate = new Date('2031-03-08T00:00:00');
+    const activationDate = new Date('2026-03-08T00:00:00');
     const currentDate = new Date();
     return currentDate >= activationDate;
   }
@@ -846,14 +980,14 @@ scene.add(new THREE.AmbientLight(0x111111));
     
     camSys.reset();
     thrusters.forEach(t => {
-      t.active = false;
-      t.material.emissive.setHex(0x000000);
+      setThrusterActive(t, false);
     });
     
   
     specialThrusterModeEnabled = checkSpecialThrusterModeDate();
     disabledThrusterIndex = -1;
     specialThrusterModeTriggered = false;
+    updateThrusterMenuSpecialStates();
     
     // Reset clock when simulation is reset - reset to docked state
     isDocked = true;
@@ -1132,6 +1266,9 @@ scene.add(new THREE.AmbientLight(0x111111));
       
       // Initialize all systems with the combined configuration
       thrusters = await initializeThrustersWithConfig(config.thrusters, CANNON, satMesh, keyToThrusterIndices, createThrusterVisual, centerOfMassOffset);
+      window.thrusters = thrusters;
+      initializeThrusterMenu();
+      initializeControllerMenu();
       
       // Load hulls from the JSON file
       loadConvexHulls(CONVEX_HULLS_PATH, scene, world);
@@ -1214,28 +1351,52 @@ scene.add(new THREE.AmbientLight(0x111111));
     }
     //specialThrusterModeEnabled = true;
     
-    // Check if spacecraft z position is < 2 and trigger special thruster mode
-    if (specialThrusterModeEnabled && !specialThrusterModeTriggered && satBody && satBody.position.z < 2) {
-      // Find thrusters facing -z direction using dot product
-      const negativeZDirection = new CANNON.Vec3(0, 0, -1);
-      const thrustersFacingNegativeZ = [];
-      
+    // Check if spacecraft z position is < 2 and trigger special thruster mode.
+    // Disable one thruster that is oriented (in WORLD space) toward +Z. If
+    // several qualify, pick one at random so the failure is non-deterministic.
+    // If none qualify in the current orientation, fall back to a random one.
+    if (specialThrusterModeEnabled && !specialThrusterModeTriggered && satBody && thrusters.length > 0 && satBody.position.z < 2) {
+      const positiveZDirection = new CANNON.Vec3(0, 0, 1);
+      const thrustersFacingPositiveZ = [];
+
       thrusters.forEach((thruster, index) => {
-        const dotProduct = thruster.dir.dot(negativeZDirection);
+        // thruster.dir is in the spacecraft's LOCAL frame; rotate it into
+        // world space using the current orientation before testing against
+        // the world +Z axis.
+        const worldDir = satBody.quaternion.vmult(thruster.dir);
+        const dotProduct = worldDir.dot(positiveZDirection);
         if (dotProduct > 0) {
-          thrustersFacingNegativeZ.push({ index, thruster, dotProduct });
+          thrustersFacingPositiveZ.push(index);
         }
       });
-      
-      // Randomly select one of the thrusters facing -z
-      if (thrustersFacingNegativeZ.length > .707) {
-        const randomIndex = Math.floor(Math.random() * thrustersFacingNegativeZ.length);
-        disabledThrusterIndex = thrustersFacingNegativeZ[randomIndex].index;
-        specialThrusterModeTriggered = true;
+
+      // Pick randomly among the +Z-facing thrusters, else a random fallback.
+      if (thrustersFacingPositiveZ.length > 0) {
+        disabledThrusterIndex = thrustersFacingPositiveZ[
+          Math.floor(Math.random() * thrustersFacingPositiveZ.length)
+        ];
+      } else {
+        disabledThrusterIndex = Math.floor(Math.random() * thrusters.length);
       }
+
+      specialThrusterModeTriggered = true;
+      setThrusterActive(thrusters[disabledThrusterIndex], false);
+      updateThrusterMenuSpecialStates();
     }
-    
+
+    // Helper: a key counts as "pressed" if it's down on the real keyboard OR
+    // held by the student controller. The controller drives the exact same
+    // thruster/fuel path as a human pilot, so its keys are merged in here.
+    const isKeyActive = (key) => {
+      if (fineControlMode ? fineControlKeys[key] : keys[key]) return true;
+      return studentController ? studentController.getActiveKeys().has(key) : false;
+    };
+
     if (!paused && satBody){
+      if (studentController) {
+        studentController.update();
+      }
+
       if (attitudeControl && attitudeControl.loaded && attitudeControl.mode !== 'thrusters') {
         const torque = new CANNON.Vec3(0, 0, 0);
         const isCMGMode = attitudeControl.mode === 'cmgs';
@@ -1255,49 +1416,46 @@ scene.add(new THREE.AmbientLight(0x111111));
         
         if (fineControlMode) {
           // Swap I and K for CMGs
-          if (isCMGMode ? fineControlKeys['k'] : fineControlKeys['i']) torque.x += torquePerAxis;
-          if (isCMGMode ? fineControlKeys['i'] : fineControlKeys['k']) torque.x -= torquePerAxis;
+          if (isCMGMode ? isKeyActive('k') : isKeyActive('i')) torque.x += torquePerAxis;
+          if (isCMGMode ? isKeyActive('i') : isKeyActive('k')) torque.x -= torquePerAxis;
           // Swap J and L for CMGs
-          if (isCMGMode ? fineControlKeys['j'] : fineControlKeys['l']) torque.y += torquePerAxis;
-          if (isCMGMode ? fineControlKeys['l'] : fineControlKeys['j']) torque.y -= torquePerAxis;
+          if (isCMGMode ? isKeyActive('j') : isKeyActive('l')) torque.y += torquePerAxis;
+          if (isCMGMode ? isKeyActive('l') : isKeyActive('j')) torque.y -= torquePerAxis;
           // Swap U and O for CMGs
-          if (isCMGMode ? fineControlKeys['o'] : fineControlKeys['u']) torque.z += torquePerAxis;
-          if (isCMGMode ? fineControlKeys['u'] : fineControlKeys['o']) torque.z -= torquePerAxis;
+          if (isCMGMode ? isKeyActive('o') : isKeyActive('u')) torque.z += torquePerAxis;
+          if (isCMGMode ? isKeyActive('u') : isKeyActive('o')) torque.z -= torquePerAxis;
         } else {
           // Swap I and K for CMGs
-          if (isCMGMode ? keys['k'] : keys['i']) torque.x += torquePerAxis;
-          if (isCMGMode ? keys['i'] : keys['k']) torque.x -= torquePerAxis;
+          if (isCMGMode ? isKeyActive('k') : isKeyActive('i')) torque.x += torquePerAxis;
+          if (isCMGMode ? isKeyActive('i') : isKeyActive('k')) torque.x -= torquePerAxis;
           // Swap J and L for CMGs
-          if (isCMGMode ? keys['j'] : keys['l']) torque.y += torquePerAxis;
-          if (isCMGMode ? keys['l'] : keys['j']) torque.y -= torquePerAxis;
+          if (isCMGMode ? isKeyActive('j') : isKeyActive('l')) torque.y += torquePerAxis;
+          if (isCMGMode ? isKeyActive('l') : isKeyActive('j')) torque.y -= torquePerAxis;
           // Swap U and O for CMGs
-          if (isCMGMode ? keys['o'] : keys['u']) torque.z += torquePerAxis;
-          if (isCMGMode ? keys['u'] : keys['o']) torque.z -= torquePerAxis;
+          if (isCMGMode ? isKeyActive('o') : isKeyActive('u')) torque.z += torquePerAxis;
+          if (isCMGMode ? isKeyActive('u') : isKeyActive('o')) torque.z -= torquePerAxis;
         }
         if (torque.length() > 0) attitudeControl.applyControlTorque(torque);
-        if (attitudeControl.desaturationActive) attitudeControl.desaturateWithThrusters(thrusters, keyToThrusterIndices);
       } else {
         Object.entries(keyToThrusterIndices).forEach(([key, indices]) => {
-          const keyIsPressed = fineControlMode ? fineControlKeys[key] : keys[key];
+          const keyIsPressed = isKeyActive(key);
           if (keyIsPressed && indices.length && !['w','s','a','d','q','e'].includes(key)) {
             indices.forEach(i => {
               const t = thrusters[i]; if (!t) return;
-              // Skip if thruster is disabled by special thruster mode
-              if (specialThrusterModeTriggered && i === disabledThrusterIndex) return;
+              if (isThrusterDisabled(i)) { setThrusterActive(t, false); return; }
               const fuelStatus = getFuelStatus();
-              if (fuelStatus.fuelMass <= 0) { if (t.active) { t.active = false; t.material.emissive.setHex(0x000000); } return; }
-              if (!t.thrust || !t.isp || t.isp <= 0 || isNaN(t.thrust) || isNaN(t.isp)) { console.error("Thruster has invalid properties, skipping.", t); if (t.active) { t.active = false; t.material.emissive.setHex(0x000000); } return; }
+              if (fuelStatus.fuelMass <= 0) { if (t.active) setThrusterActive(t, false); return; }
+              if (!t.thrust || !t.isp || t.isp <= 0 || isNaN(t.thrust) || isNaN(t.isp)) { console.error("Thruster has invalid properties, skipping.", t); if (t.active) setThrusterActive(t, false); return; }
               const forceLocal = t.dir.scale(t.thrust);
               satBody.applyLocalForce(forceLocal, t.pos);
               const fuelConsumptionRate = t.thrust / (t.isp * 9.81);
               const fuelConsumed = fuelConsumptionRate * dt;
               const remainingFuel = consumeFuel(fuelConsumed);
-              if (remainingFuel <= 0) { if (t.active) { t.active = false; t.material.emissive.setHex(0x000000); } return; }
+              if (remainingFuel <= 0) { if (t.active) setThrusterActive(t, false); return; }
 
               // FIX: Visually activate the thruster
               if (!t.active) {
-                t.active = true;
-                t.material.emissive.setHex(0xff5500);
+                setThrusterActive(t, true);
               }
             });
           }
@@ -1305,26 +1463,24 @@ scene.add(new THREE.AmbientLight(0x111111));
       }
       
       Object.entries(keyToThrusterIndices).forEach(([key, indices]) => {
-        const keyIsPressed = fineControlMode ? fineControlKeys[key] : keys[key];
+        const keyIsPressed = isKeyActive(key);
         if (keyIsPressed && indices.length && ['w','s','a','d','q','e'].includes(key)) {
           indices.forEach(i => {
             const t = thrusters[i]; if (!t) return;
-            // Skip if thruster is disabled by special thruster mode
-            if (specialThrusterModeTriggered && i === disabledThrusterIndex) return;
+            if (isThrusterDisabled(i)) { setThrusterActive(t, false); return; }
             const fuelStatus = getFuelStatus();
-            if (fuelStatus.fuelMass <= 0) { if (t.active) { t.active = false; t.material.emissive.setHex(0x000000); } return; }
-            if (!t.thrust || !t.isp || t.isp <= 0 || isNaN(t.thrust) || isNaN(t.isp)) { console.error("Thruster has invalid properties, skipping.", t); if (t.active) { t.active = false; t.material.emissive.setHex(0x000000); } return; }
+            if (fuelStatus.fuelMass <= 0) { if (t.active) setThrusterActive(t, false); return; }
+            if (!t.thrust || !t.isp || t.isp <= 0 || isNaN(t.thrust) || isNaN(t.isp)) { console.error("Thruster has invalid properties, skipping.", t); if (t.active) setThrusterActive(t, false); return; }
             const forceLocal = t.dir.scale(t.thrust);
             satBody.applyLocalForce(forceLocal, t.pos);
             const fuelConsumptionRate = t.thrust / (t.isp * 9.81);
             const fuelConsumed = fuelConsumptionRate * dt;
             const remainingFuel = consumeFuel(fuelConsumed);
-            if (remainingFuel <= 0) { if (t.active) { t.active = false; t.material.emissive.setHex(0x000000); } return; }
+            if (remainingFuel <= 0) { if (t.active) setThrusterActive(t, false); return; }
 
             // FIX: Visually activate the thruster
             if (!t.active) {
-              t.active = true;
-              t.material.emissive.setHex(0xff5500);
+              setThrusterActive(t, true);
             }
           });
         }
@@ -1345,12 +1501,11 @@ scene.add(new THREE.AmbientLight(0x111111));
 
     thrusters.forEach(t => {
       const stillPressed = Object.entries(keyToThrusterIndices).some(([k,ids])=> {
-        const keyIsPressed = fineControlMode ? fineControlKeys[k] : keys[k];
+        const keyIsPressed = isKeyActive(k);
         return keyIsPressed && ids.includes(t.index);
       });
-      if (t.active && !stillPressed){
-        t.active = false;
-        t.material.emissive.setHex(0x000000);
+      if (t.active && (!stillPressed || isThrusterDisabled(t.index))){
+        setThrusterActive(t, false);
       }
     });
 

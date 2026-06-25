@@ -22,7 +22,6 @@ const uiElements = {
   rwList: null,
   cmgStatus: null,
   cmgList: null,
-  desaturationStatus: null,
   lampStatusText: null,
   lampCount: null,
   distInfo: null,
@@ -55,7 +54,6 @@ export function initializeUI() {
   uiElements.rwList = document.getElementById('rw-list');
   uiElements.cmgStatus = document.getElementById('cmg-status');
   uiElements.cmgList = document.getElementById('cmg-list');
-  uiElements.desaturationStatus = document.getElementById('desaturation-status');
   uiElements.lampStatusText = document.getElementById('lamp-status-text');
   uiElements.lampCount = document.getElementById('lamp-count');
   uiElements.distInfo = document.getElementById('distance-info');
@@ -216,10 +214,6 @@ function updateAttitudeControlStatus(attitudeControl) {
   if (!attitudeControl || !attitudeControl.loaded) return;
   
   const status = attitudeControl.getStatus();
-  
-  // Update desaturation status
-  uiElements.desaturationStatus.style.display = 
-    status.desaturationActive ? 'block' : 'none';
   
   // Update reaction wheel status
   if (status.mode === 'reactionwheels' && status.reactionWheels) {

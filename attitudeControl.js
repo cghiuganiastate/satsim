@@ -11,7 +11,6 @@ class AttitudeControlSystem {
         this.reactionWheels = [];
         this.cmgs = [];
         this.loaded = false;
-        this.desaturationActive = false;
         this.centerOfMassOffset = {x: 0, y: 0, z: 0};
     }
 
@@ -255,97 +254,10 @@ class AttitudeControlSystem {
         });
     }
 
-    desaturateWithThrusters(thrusters, keyToThrusterIndices) {
-        if (this.mode === 'reactionwheels') {
-            this.desaturationActive = true;
-            
-            let totalMomentum = new CANNON.Vec3(0, 0, 0);
-            this.reactionWheels.forEach(wheel => {
-                const momentum = wheel.orientation.scale(wheel.currentAngularMomentum);
-                totalMomentum.vadd(momentum, totalMomentum);
-            });
-            
-            if (totalMomentum.length() > 0.1) {
-                const thrustDirection = totalMomentum.unit().scale(-1);
-                
-                thrusters.forEach((thruster, index) => {
-                    const torqueDirection = thruster.pos.cross(thruster.dir);
-                    const alignment = torqueDirection.dot(thrustDirection);
-                    
-                    if (alignment > 0.5) {
-                        const force = thruster.dir.scale(thruster.thrust * 0.5);
-                        this.satBody.applyLocalForce(force, thruster.pos);
-                        
-                        this.reactionWheels.forEach(wheel => {
-                            const reduction = wheel.orientation.scale(alignment * 0.01);
-                            const newMomentum = wheel.currentAngularMomentum - reduction.length();
-                            wheel.currentAngularMomentum = Math.max(
-                                -wheel.maxAngularMomentum,
-                                Math.min(wheel.maxAngularMomentum, newMomentum)
-                            );
-                        });
-                    }
-                });
-            }
-            
-            let maxMomentum = 0;
-            this.reactionWheels.forEach(wheel => {
-                maxMomentum = Math.max(maxMomentum, Math.abs(wheel.currentAngularMomentum));
-            });
-            
-            if (maxMomentum < 0.5) {
-                this.desaturationActive = false;
-            }
-        } else if (this.mode === 'cmgs') {
-            this.desaturationActive = true;
-            
-            // Calculate total momentum across all CMGs
-            let totalMomentum = new CANNON.Vec3(0, 0, 0);
-            this.cmgs.forEach(cmg => {
-                totalMomentum.vadd(cmg.currentAngularMomentum, totalMomentum);
-            });
-            
-            const totalMomentumMag = totalMomentum.length();
-            
-            // If total momentum is above threshold, use thrusters to desaturate all CMGs
-            if (totalMomentumMag > 10) {  // Threshold for desaturation
-                const momentumDir = totalMomentum.unit().scale(-1);
-                
-                thrusters.forEach((thruster, index) => {
-                    const torqueDirection = thruster.pos.cross(thruster.dir);
-                    const alignment = torqueDirection.dot(momentumDir);
-                    
-                    if (alignment > 0.5) {
-                        const force = thruster.dir.scale(thruster.thrust * 0.3);
-                        this.satBody.applyLocalForce(force, thruster.pos);
-                        
-                        // Reduce all CMGs' momentum
-                        const reductionFactor = 0.02;
-                        this.cmgs.forEach(cmg => {
-                            const reduction = momentumDir.scale(reductionFactor);
-                            cmg.currentAngularMomentum.vsub(reduction, cmg.currentAngularMomentum);
-                        });
-                    }
-                });
-            }
-            
-            // Recalculate total momentum
-            totalMomentum = new CANNON.Vec3(0, 0, 0);
-            this.cmgs.forEach(cmg => {
-                totalMomentum.vadd(cmg.currentAngularMomentum, totalMomentum);
-            });
-            
-            if (totalMomentum.length() < 5) {
-                this.desaturationActive = false;
-            }
-        }
-    }
-
     getStatus() {
         const status = {
             mode: this.mode,
-            loaded: this.loaded,
-            desaturationActive: this.desaturationActive
+            loaded: this.loaded
         };
         
         if (this.mode === 'reactionwheels' && this.reactionWheels.length > 0) {
