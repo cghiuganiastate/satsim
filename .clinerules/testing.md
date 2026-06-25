@@ -1,0 +1,1 @@
+do not try to test the software, i will test it by opening it in the browser, and report any errors back. there is no node on this machine, do not check the syntax, i will check it with the browser. simply mark the task as done and let me take over.

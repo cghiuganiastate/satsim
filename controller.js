@@ -1,45 +1,45 @@
 import * as THREE from 'three';
 
 const STARTER_CODE = `// ===== STUDENT AUTOPILOT CONTROLLER =====
-// Edit this code and click Apply. The spacecraft is NOT reset when you apply code.
+// This is just an example to get you started
+// Edit this code and click Apply. Code updates instantly upon apply button press.
 // Press 1 to toggle this controller on/off.
+
+// ── SENSOR FRAMES ──────────────────────────────────────────────────
+// Every motion sensor is provided in BOTH coordinate frames:
+//
+//   GLOBAL (inertial) — matches the HUD numbers
+//     state.position, state.velocity, state.orientation, state.gyro
+//
+//   BODY-FIXED — what the spacecraft "feels" along its own x/y/z axes.
+//     state.velocityBody, state.gyroBody
 
 let lastPrintTime = 0;
 
 function computeControl(state, inputs) {
-  // Read sensors from the simulation
-  const position = state.position;          // meters: { x, y, z }
-  const velocity = state.velocity;          // m/s:    { x, y, z }
-  const orientation = state.orientation;    // degrees:{ roll, pitch, yaw }
-  const gyro = state.gyro;                  // deg/s:  { x, y, z }
+  // Body-fixed sensors (orientation-independent — use these for PID).
+  const vb = state.velocityBody;   // m/s  along body x/y/z
+  const gb = state.gyroBody;       // deg/s around body x/y/z
 
-  // Read a custom text input from the controller panel
+  // Global sensors (match the HUD — use for navigation/docking).
+  const position    = state.position;
+  const velocity    = state.velocity;
+  const orientation = state.orientation;
   const message = inputs.text;
 
-  // Print values to the output box twice per second
+  // ── PRINT (twice per second) ──────────────────────────────────────
   if (state.time - lastPrintTime > 0.5) {
-    log('Input box says: ' + message);
-    log('pos x=' + position.x.toFixed(2) + ' vel x=' + velocity.x.toFixed(2));
-    log('roll=' + orientation.roll.toFixed(1) + ' gyro y=' + gyro.y.toFixed(1));
-    lastPrintTime = state.time;
+    log('Input box says: ' + message) //you can maybe use this to do something fun
+    log('velBody  x=' + vb.x.toFixed(2) + ' y=' + vb.y.toFixed(2) + ' z=' + vb.z.toFixed(2));
+    log('gyroBody x=' + gb.x.toFixed(2) + ' y=' + gb.y.toFixed(2) + ' z=' + gb.z.toFixed(2));
+    lastPrintTime = state.time; //i gave you your states, rest is up to you :^)
   }
-
-  // The controller does NOT apply forces/torques directly. Instead it "presses
-  // keys," exactly like a human at the keyboard. That means thrusters fire
-  // normally and consume fuel, just like manual control.
-  //
-  // Available control keys (same as the keyboard):
-  //   Translation: w s a d q e
-  //   Rotation:    i k j l u o
-  // Return the keys you want held down this frame, e.g. { keys: ['w'] }.
-
-  // Example: fire the "w" translation thruster
-  // return { keys: ['w'] };
-
-  // Example: fire the "i" rotation thruster
-  // return { keys: ['i'] };
-
-  return {}; // no keys pressed
+  //Last thing I will show you is how to push buttons
+  const keys = [];
+  keys.push('i'); // apply −X rotation
+  keys.push('d');   // apply −X translation
+  //just put as many button pushes as you want and its like you are pressing the keyboard
+  return { keys: keys };// push both keys at the same time
 }
 
 function onKeyPress(key, action) {
@@ -210,11 +210,28 @@ export class StudentController {
   buildState() {
     const q = this.satBody.quaternion;
     const threeQ = new THREE.Quaternion(q.x, q.y, q.z, q.w);
-    const euler = new THREE.Euler().setFromQuaternion(threeQ, 'XYZ');
+    // q rotates body->world, so its inverse (== conjugate for a unit
+    // quaternion) rotates world->body. We use it to convert the physics
+    // engine's world-frame velocity/angular velocity into the spacecraft's
+    // body-fixed frame so the controller can read "body" rates.
+    const invQ = threeQ.clone().invert();
+    // IMPORTANT: must use 'YXZ' to match the HUD's decomposition order, or the
+    // roll/pitch/yaw shown here will differ from the HUD for the same attitude.
+    const euler = new THREE.Euler().setFromQuaternion(threeQ, 'YXZ');
     const radToDeg = 180 / Math.PI;
+
+    // World-frame (global/inertial) motion from the physics body.
+    const worldVel = this.satBody.velocity;
+    const worldAngVel = this.satBody.angularVelocity;
+
+    // Body-fixed motion: rotate the world vectors into the spacecraft frame.
+    const localVel = new THREE.Vector3(worldVel.x, worldVel.y, worldVel.z).applyQuaternion(invQ);
+    const localAngVel = new THREE.Vector3(worldAngVel.x, worldAngVel.y, worldAngVel.z).applyQuaternion(invQ);
+
     return {
+      // Global (inertial) frame quantities.
       position: vecToPlain(this.satBody.position),
-      velocity: vecToPlain(this.satBody.velocity),
+      velocity: vecToPlain(worldVel),
       orientation: {
         roll: euler.z * radToDeg,
         pitch: euler.x * radToDeg,
@@ -226,14 +243,26 @@ export class StudentController {
         yaw: euler.y * radToDeg
       },
       gyro: {
-        x: this.satBody.angularVelocity.x * radToDeg,
-        y: this.satBody.angularVelocity.y * radToDeg,
-        z: this.satBody.angularVelocity.z * radToDeg
+        x: worldAngVel.x * radToDeg,
+        y: worldAngVel.y * radToDeg,
+        z: worldAngVel.z * radToDeg
       },
       angularVelocity: {
-        x: this.satBody.angularVelocity.x * radToDeg,
-        y: this.satBody.angularVelocity.y * radToDeg,
-        z: this.satBody.angularVelocity.z * radToDeg
+        x: worldAngVel.x * radToDeg,
+        y: worldAngVel.y * radToDeg,
+        z: worldAngVel.z * radToDeg
+      },
+      // Body-fixed frame quantities (what the spacecraft "feels").
+      velocityBody: vecToPlain(localVel),
+      gyroBody: {
+        x: localAngVel.x * radToDeg,
+        y: localAngVel.y * radToDeg,
+        z: localAngVel.z * radToDeg
+      },
+      angularVelocityBody: {
+        x: localAngVel.x * radToDeg,
+        y: localAngVel.y * radToDeg,
+        z: localAngVel.z * radToDeg
       },
       time: (performance.now() - this.startTime) / 1000
     };

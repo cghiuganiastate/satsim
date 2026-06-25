@@ -153,9 +153,15 @@ function updateUnifiedHUD(satBody, isPaused, cameraSystem, fineControlMode, isDo
     uiElements.velocityInfo.textContent = `X: ${v.x.toFixed(2)} Y: ${v.y.toFixed(2)} Z: ${v.z.toFixed(2)}`;
   }
   
-  // Update angular velocity info
+  // Update angular velocity info (convert physics rad/s to deg/s so the HUD
+  // matches the values reported to the student controller in state.gyro).
+  const avDeg = {
+    x: THREE.MathUtils.radToDeg(av.x),
+    y: THREE.MathUtils.radToDeg(av.y),
+    z: THREE.MathUtils.radToDeg(av.z)
+  };
   if (uiElements.angularVelocityInfo) {
-    uiElements.angularVelocityInfo.textContent = `X: ${av.x.toFixed(2)} Y: ${av.y.toFixed(2)} Z: ${av.z.toFixed(2)}`;
+    uiElements.angularVelocityInfo.textContent = `X: ${avDeg.x.toFixed(2)} Y: ${avDeg.y.toFixed(2)} Z: ${avDeg.z.toFixed(2)}`;
   }
   
   // Update attitude info

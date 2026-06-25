@@ -73,7 +73,7 @@ function processThrusterConfig(config, CANNON, satMesh, keyToThrusterIndices, cr
       t.position[2] - (centerOfMass.z || 0)
     );
     const dir = new CANNON.Vec3(t.direction[0], t.direction[1], t.direction[2]).unit();
-    const { group: visual, material } = createThrusterVisual(pos, dir);
+    const { group: visual, material, plume, smokePuff } = createThrusterVisual(pos, dir);
     satMesh.add(visual);
 
     // --- DATA SANITIZATION ---
@@ -140,8 +140,8 @@ function processThrusterConfig(config, CANNON, satMesh, keyToThrusterIndices, cr
     }
     // ----------------------------------
 
-    // Return sanitized thruster object
-    return { pos, dir, thrust, isp, visual, material, active: false, index: i, name: t.name || `Thruster ${i + 1}` };
+    // Return sanitized thruster object (plume = transparent exhaust cone mesh)
+    return { pos, dir, thrust, isp, visual, material, plume, smokePuff, active: false, index: i, name: t.name || `Thruster ${i + 1}` };
   });
 
   return thrusters;
