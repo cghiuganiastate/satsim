@@ -1,0 +1,1436 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Convex Hull Generator for Cannon-ES</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+            background-color: #f5f5f5;
+            color: #333;
+        }
+        
+        #container {
+            display: flex;
+            height: 100vh;
+        }
+        
+        #controls {
+            width: 320px;
+            background-color: rgba(255, 255, 255, 0.95);
+            padding: 15px;
+            overflow-y: auto;
+            box-shadow: 2px 0 10px rgba(0, 0, 0, 0.1);
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        #top-controls {
+            position: sticky;
+            top: 0;
+            background-color: rgba(255, 255, 255, 0.95);
+            padding: 0 0 15px 0;
+            margin: -15px -15px 15px -15px;
+            z-index: 20;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        
+        #bottom-controls {
+            position: sticky;
+            bottom: 0;
+            background-color: rgba(255, 255, 255, 0.95);
+            padding: 15px;
+            margin: 15px -15px -15px -15px;
+            z-index: 20;
+            box-shadow: 0 -2px 4px rgba(0,0,0,0.05);
+        }
+        
+        #boxes-container {
+            flex: 1;
+            overflow-y: auto;
+        }
+        
+        #viewport {
+            flex: 1;
+            position: relative;
+        }
+        
+        .box-control {
+            border: 1px solid #ddd;
+            padding: 12px;
+            margin-bottom: 12px;
+            border-radius: 6px;
+            background-color: white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        
+        .box-control h3 {
+            margin-top: 0;
+            color: #2c3e50;
+            font-size: 16px;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 8px;
+        }
+        
+        .control-group {
+            margin-bottom: 10px;
+        }
+        
+        .control-group label {
+            display: block;
+            margin-bottom: 4px;
+            font-size: 12px;
+            color: #555;
+            font-weight: 500;
+        }
+        
+        .control-group input[type="range"] {
+            width: 100%;
+            height: 6px;
+            border-radius: 3px;
+            background: #ddd;
+            outline: none;
+        }
+        
+        .control-group input[type="color"] {
+            width: 100%;
+            height: 32px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        
+        .slider-container {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        
+        .slider-container input[type="range"] {
+            flex: 1;
+        }
+        
+        .slider-jog {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background-color: #3498db;
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background-color 0.2s;
+        }
+        
+        .slider-jog:hover {
+            background-color: #2980b9;
+        }
+        
+        .slider-jog.minus {
+            background-color: #e74c3c;
+        }
+        
+        .slider-jog.minus:hover {
+            background-color: #c0392b;
+        }
+        
+        button {
+            padding: 8px 12px;
+            margin-right: 5px;
+            margin-bottom: 5px;
+            background-color: #3498db;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+            transition: background-color 0.2s;
+        }
+        
+        button:hover {
+            background-color: #2980b9;
+        }
+        
+        button.delete {
+            background-color: #e74c3c;
+        }
+        
+        button.delete:hover {
+            background-color: #c0392b;
+        }
+        
+        button.primary {
+            background-color: #2ecc71;
+        }
+        
+        button.primary:hover {
+            background-color: #27ae60;
+        }
+        
+        button.copy {
+            background-color: #f39c12;
+        }
+        
+        button.copy:hover {
+            background-color: #e67e22;
+        }
+        
+        .button-group {
+            display: flex;
+            flex-wrap: wrap;
+        }
+        
+        #file-input {
+            display: none;
+        }
+        
+        .file-label {
+            display: inline-block;
+            padding: 8px 12px;
+            background-color: #9b59b6;
+            color: white;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 5px;
+            margin-bottom: 5px;
+            font-size: 13px;
+            transition: background-color 0.2s;
+        }
+        
+        .file-label:hover {
+            background-color: #8e44ad;
+        }
+        
+        #info {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background-color: rgba(255, 255, 255, 0.9);
+            padding: 12px;
+            border-radius: 6px;
+            max-width: 250px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        #info h3 {
+            margin-top: 0;
+            margin-bottom: 8px;
+            color: #2c3e50;
+            font-size: 14px;
+        }
+        
+        #info p {
+            margin: 4px 0;
+            font-size: 12px;
+        }
+        
+        .notification {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background-color: rgba(44, 62, 80, 0.9);
+            color: white;
+            padding: 12px 18px;
+            border-radius: 6px;
+            z-index: 1000;
+            display: none;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            max-width: 300px;
+        }
+        
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .header h2 {
+            margin: 0;
+            color: #2c3e50;
+            font-size: 18px;
+        }
+        
+        .model-info {
+            font-size: 12px;
+            color: #7f8c8d;
+            margin-top: 5px;
+        }
+        
+        .status-indicator {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 5px;
+        }
+        
+        .status-indicator.success {
+            background-color: #2ecc71;
+        }
+        
+        .status-indicator.error {
+            background-color: #e74c3c;
+        }
+        
+        .status-indicator.warning {
+            background-color: #f39c12;
+        }
+        
+        .preview-controls {
+            padding: 0 15px;
+        }
+        
+        .preview-controls h3 {
+            margin-top: 0;
+            margin-bottom: 10px;
+            color: #2c3e50;
+            font-size: 16px;
+        }
+        
+        .preview-controls .control-group {
+            display: flex;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        
+        .preview-controls .control-group label {
+            margin-bottom: 0;
+            margin-right: 10px;
+        }
+        
+        .preview-controls input[type="checkbox"] {
+            margin-right: 5px;
+        }
+        
+        .preview-controls input[type="range"] {
+            width: 120px;
+        }
+        
+        .slider-value {
+            font-weight: bold;
+            min-width: 30px;
+            text-align: center;
+            margin-left: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <div id="controls">
+            <div id="top-controls">
+                <div class="header">
+                    <h2>Convex Hull Controls</h2>
+                </div>
+                <div class="model-info">
+                    <span id="model-status" class="status-indicator"></span>
+                    <span id="model-text">No model loaded</span>
+                </div>
+                
+                <div class="preview-controls">
+                    <h3>Preview Options</h3>
+                    <div class="control-group">
+                        <input type="checkbox" id="show-original" checked>
+                        <label for="show-original">Show Original Model</label>
+                    </div>
+                    <div class="control-group">
+                        <input type="checkbox" id="show-boxes" checked>
+                        <label for="show-boxes">Show Boxes</label>
+                    </div>
+                    <div class="control-group">
+                        <input type="checkbox" id="show-hulls" checked>
+                        <label for="show-hulls">Show Hulls</label>
+                    </div>
+                    <div class="control-group">
+                        <label for="hull-opacity">Hull Opacity:</label>
+                        <input type="range" id="hull-opacity" min="0.1" max="1" step="0.1" value="0.5">
+                        <span id="hull-opacity-value" class="slider-value">0.5</span>
+                    </div>
+                    <div class="control-group">
+                        <label for="sample-count">Sample Points:</label>
+                        <input type="range" id="sample-count" min="50" max="1000" step="50" value="200">
+                        <span id="sample-count-value" class="slider-value">200</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div id="boxes-container"></div>
+            
+            <div id="bottom-controls">
+                <div class="button-group">
+                    <button id="add-box" class="primary">Add Box</button>
+                    <button id="generate-hulls">Generate Hulls</button>
+                    <button id="export-hulls">Export Hulls</button>
+                    <label for="file-input" class="file-label">Import Hulls</label>
+                    <input type="file" id="file-input" accept=".json">
+                </div>
+            </div>
+        </div>
+        <div id="viewport">
+            <div id="info">
+                <h3>Controls</h3>
+                <p>Left Mouse: Rotate</p>
+                <p>Right Mouse: Pan</p>
+                <p>Scroll: Zoom</p>
+            </div>
+        </div>
+    </div>
+    <div id="notification" class="notification"></div>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/",
+                "cannon-es": "https://unpkg.com/cannon-es@0.20.0/dist/cannon-es.js"
+            }
+        }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+        import { ConvexGeometry } from 'three/addons/geometries/ConvexGeometry.js';
+        import * as CANNON from 'cannon-es';
+
+        // Scene setup
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0xf5f5f5);
+        
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(5, 5, 5);
+        
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth - 320, window.innerHeight);
+        document.getElementById('viewport').appendChild(renderer.domElement);
+        
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        
+        // Lighting
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+        scene.add(ambientLight);
+        
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        directionalLight.position.set(10, 10, 5);
+        scene.add(directionalLight);
+        
+        // Grid helper
+        const gridHelper = new THREE.GridHelper(20, 20, 0x888888, 0xcccccc);
+        scene.add(gridHelper);
+        
+        // Physics world
+        const world = new CANNON.World();
+        world.gravity.set(0, -9.82, 0);
+        world.broadphase = new CANNON.NaiveBroadphase();
+        
+        // Model loading
+        const MODEL_PATH = 'https://raw.githubusercontent.com/nasa/NASA-3D-Resources/11ebb4ee043715aefbba6aeec8a61746fad67fa7/3D%20Models/Gateway/Gateway%20Core.glb'; // Default model as requested
+        let station;
+        const loader = new GLTFLoader();
+        loader.load(MODEL_PATH, gltf => {
+            station = gltf.scene;
+            station.scale.set(1, 1, 1);
+            
+            // Apply rotations as specified
+            let rot1 = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI/180*-25);
+            station.quaternion.multiply(rot1);
+            let rot2 = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI/180*-10);
+            station.quaternion.multiply(rot2);
+            
+            station.position.set(0, 0, 0);
+            scene.add(station);
+            
+            // Update model status
+            document.getElementById('model-status').className = 'status-indicator success';
+            document.getElementById('model-text').textContent = 'Model loaded successfully';
+            
+            showNotification("Model loaded successfully!");
+        }, undefined, err => {
+            console.error('GLTF load error:', err);
+            document.getElementById('model-status').className = 'status-indicator error';
+            document.getElementById('model-text').textContent = 'Error loading model';
+            showNotification("Error loading model. Check console for details.");
+        });
+        
+        // Box management
+        let boxes = [];
+        let boxIdCounter = 0;
+        let hulls = [];
+        
+        // Preview controls
+        const showOriginalCheckbox = document.getElementById('show-original');
+        const showBoxesCheckbox = document.getElementById('show-boxes');
+        const showHullsCheckbox = document.getElementById('show-hulls');
+        const hullOpacitySlider = document.getElementById('hull-opacity');
+        const hullOpacityValue = document.getElementById('hull-opacity-value');
+        const sampleCountSlider = document.getElementById('sample-count');
+        const sampleCountValue = document.getElementById('sample-count-value');
+        
+        // Preview control event listeners
+        showOriginalCheckbox.addEventListener('change', () => {
+            if (station) station.visible = showOriginalCheckbox.checked;
+        });
+        
+        showBoxesCheckbox.addEventListener('change', () => {
+            boxes.forEach(box => {
+                box.mesh.visible = showBoxesCheckbox.checked;
+            });
+        });
+        
+        showHullsCheckbox.addEventListener('change', () => {
+            hulls.forEach(hull => {
+                hull.mesh.visible = showHullsCheckbox.checked;
+            });
+        });
+        
+        hullOpacitySlider.addEventListener('input', (e) => {
+            const opacity = parseFloat(e.target.value);
+            hullOpacityValue.textContent = opacity;
+            hulls.forEach(hull => {
+                hull.material.opacity = opacity;
+            });
+        });
+        
+        sampleCountSlider.addEventListener('input', (e) => {
+            sampleCountValue.textContent = e.target.value;
+        });
+        
+        // Box class
+        class Box {
+            constructor(id, position = { x: 0, y: 0, z: 0 }, size = { x: 2, y: 2, z: 2 }, color = 0x3498db) {
+                this.id = id;
+                this.position = { ...position };
+                this.size = { ...size };
+                this.color = color;
+                this.extendedRange = false;
+                
+                // Create Three.js box
+                this.geometry = new THREE.BoxGeometry(size.x, size.y, size.z);
+                this.material = new THREE.MeshBasicMaterial({ 
+                    color: color, 
+                    transparent: true, 
+                    opacity: 0.2,
+                    wireframe: false
+                });
+                this.mesh = new THREE.Mesh(this.geometry, this.material);
+                this.mesh.position.set(position.x, position.y, position.z);
+                scene.add(this.mesh);
+                
+                // Add wireframe for better visibility
+                this.wireframeGeometry = new THREE.EdgesGeometry(this.geometry);
+                this.wireframeMaterial = new THREE.LineBasicMaterial({ color: 0x000000, linewidth: 2 });
+                this.wireframe = new THREE.LineSegments(this.wireframeGeometry, this.wireframeMaterial);
+                this.mesh.add(this.wireframe);
+                
+                // Create control panel
+                this.createControlPanel();
+            }
+            
+            updatePosition() {
+                this.mesh.position.set(this.position.x, this.position.y, this.position.z);
+            }
+            
+            updateSize() {
+                this.mesh.geometry.dispose();
+                this.geometry = new THREE.BoxGeometry(this.size.x, this.size.y, this.size.z);
+                this.mesh.geometry = this.geometry;
+                
+                // Update wireframe
+                this.wireframe.geometry.dispose();
+                this.wireframeGeometry = new THREE.EdgesGeometry(this.geometry);
+                this.wireframe.geometry = this.wireframeGeometry;
+            }
+            
+            updateColor(color) {
+                this.color = color;
+                this.material.color.set(color);
+            }
+            
+            createControlPanel() {
+                const container = document.getElementById('boxes-container');
+                const boxControl = document.createElement('div');
+                boxControl.className = 'box-control';
+                boxControl.id = `box-control-${this.id}`;
+                
+                const maxPos = this.extendedRange ? 16 : 10;
+                const maxSizeY = this.extendedRange ? 20 : 10;
+                
+                boxControl.innerHTML = `
+                    <h3>Box ${this.id}</h3>
+                    <div class="control-group">
+                        <label>Position X: <span id="pos-x-value-${this.id}">${this.position.x.toFixed(2)}</span></label>
+                        <div class="slider-container">
+                            <button class="slider-jog minus" data-axis="x" data-direction="-1">-</button>
+                            <input type="range" id="pos-x-${this.id}" min="${-maxPos}" max="${maxPos}" step="0.1" value="${this.position.x}">
+                            <button class="slider-jog" data-axis="x" data-direction="1">+</button>
+                        </div>
+                    </div>
+                    <div class="control-group">
+                        <label>Position Y: <span id="pos-y-value-${this.id}">${this.position.y.toFixed(2)}</span></label>
+                        <div class="slider-container">
+                            <button class="slider-jog minus" data-axis="y" data-direction="-1">-</button>
+                            <input type="range" id="pos-y-${this.id}" min="${-maxPos}" max="${maxPos}" step="0.1" value="${this.position.y}">
+                            <button class="slider-jog" data-axis="y" data-direction="1">+</button>
+                        </div>
+                    </div>
+                    <div class="control-group">
+                        <label>Position Z: <span id="pos-z-value-${this.id}">${this.position.z.toFixed(2)}</span></label>
+                        <div class="slider-container">
+                            <button class="slider-jog minus" data-axis="z" data-direction="-1">-</button>
+                            <input type="range" id="pos-z-${this.id}" min="${-maxPos}" max="${maxPos}" step="0.1" value="${this.position.z}">
+                            <button class="slider-jog" data-axis="z" data-direction="1">+</button>
+                        </div>
+                    </div>
+                    <div class="control-group">
+                        <label>Size X: <span id="size-x-value-${this.id}">${this.size.x.toFixed(2)}</span></label>
+                        <div class="slider-container">
+                            <button class="slider-jog minus" data-axis="size-x" data-direction="-1">-</button>
+                            <input type="range" id="size-x-${this.id}" min="0.1" max="10" step="0.1" value="${this.size.x}">
+                            <button class="slider-jog" data-axis="size-x" data-direction="1">+</button>
+                        </div>
+                    </div>
+                    <div class="control-group">
+                        <label>Size Y: <span id="size-y-value-${this.id}">${this.size.y.toFixed(2)}</span></label>
+                        <div class="slider-container">
+                            <button class="slider-jog minus" data-axis="size-y" data-direction="-1">-</button>
+                            <input type="range" id="size-y-${this.id}" min="0.1" max="${maxSizeY}" step="0.1" value="${this.size.y}">
+                            <button class="slider-jog" data-axis="size-y" data-direction="1">+</button>
+                        </div>
+                    </div>
+                    <div class="control-group">
+                        <label>Size Z: <span id="size-z-value-${this.id}">${this.size.z.toFixed(2)}</span></label>
+                        <div class="slider-container">
+                            <button class="slider-jog minus" data-axis="size-z" data-direction="-1">-</button>
+                            <input type="range" id="size-z-${this.id}" min="0.1" max="10" step="0.1" value="${this.size.z}">
+                            <button class="slider-jog" data-axis="size-z" data-direction="1">+</button>
+                        </div>
+                    </div>
+                    <div class="control-group">
+                        <label>Color:</label>
+                        <input type="color" id="color-${this.id}" value="#${this.color.toString(16).padStart(6, '0')}">
+                    </div>
+                    <div class="control-group">
+                        <input type="checkbox" id="extended-range-${this.id}" ${this.extendedRange ? 'checked' : ''}>
+                        <label for="extended-range-${this.id}">Extended Range (Pos: ±16, Size Y: ±20)</label>
+                    </div>
+                    <div class="button-group">
+                        <button id="copy-box-${this.id}" class="copy">Copy</button>
+                        <button id="delete-box-${this.id}" class="delete">Delete</button>
+                    </div>
+                `;
+                
+                container.appendChild(boxControl);
+                
+                // Add event listeners
+                document.getElementById(`pos-x-${this.id}`).addEventListener('input', (e) => {
+                    this.position.x = parseFloat(e.target.value);
+                    document.getElementById(`pos-x-value-${this.id}`).textContent = this.position.x.toFixed(2);
+                    this.updatePosition();
+                });
+                
+                document.getElementById(`pos-y-${this.id}`).addEventListener('input', (e) => {
+                    this.position.y = parseFloat(e.target.value);
+                    document.getElementById(`pos-y-value-${this.id}`).textContent = this.position.y.toFixed(2);
+                    this.updatePosition();
+                });
+                
+                document.getElementById(`pos-z-${this.id}`).addEventListener('input', (e) => {
+                    this.position.z = parseFloat(e.target.value);
+                    document.getElementById(`pos-z-value-${this.id}`).textContent = this.position.z.toFixed(2);
+                    this.updatePosition();
+                });
+                
+                document.getElementById(`size-x-${this.id}`).addEventListener('input', (e) => {
+                    this.size.x = parseFloat(e.target.value);
+                    document.getElementById(`size-x-value-${this.id}`).textContent = this.size.x.toFixed(2);
+                    this.updateSize();
+                });
+                
+                document.getElementById(`size-y-${this.id}`).addEventListener('input', (e) => {
+                    this.size.y = parseFloat(e.target.value);
+                    document.getElementById(`size-y-value-${this.id}`).textContent = this.size.y.toFixed(2);
+                    this.updateSize();
+                });
+                
+                document.getElementById(`size-z-${this.id}`).addEventListener('input', (e) => {
+                    this.size.z = parseFloat(e.target.value);
+                    document.getElementById(`size-z-value-${this.id}`).textContent = this.size.z.toFixed(2);
+                    this.updateSize();
+                });
+                
+                document.getElementById(`color-${this.id}`).addEventListener('input', (e) => {
+                    this.updateColor(parseInt(e.target.value.replace('#', '0x')));
+                });
+                
+                document.getElementById(`extended-range-${this.id}`).addEventListener('change', (e) => {
+                    this.extendedRange = e.target.checked;
+                    this.updateRangeControls();
+                });
+                
+                document.getElementById(`copy-box-${this.id}`).addEventListener('click', () => {
+                    this.copy();
+                });
+                
+                document.getElementById(`delete-box-${this.id}`).addEventListener('click', () => {
+                    this.delete();
+                });
+                
+                // Add jog button event listeners
+                const jogButtons = boxControl.querySelectorAll('.slider-jog');
+                jogButtons.forEach(button => {
+                    button.addEventListener('click', (e) => {
+                        const axis = e.target.dataset.axis;
+                        const direction = parseInt(e.target.dataset.direction);
+                        this.jogSlider(axis, direction);
+                    });
+                });
+            }
+            
+            jogSlider(axis, direction) {
+                let slider, valueElement, increment;
+                
+                if (axis === 'x') {
+                    slider = document.getElementById(`pos-x-${this.id}`);
+                    valueElement = document.getElementById(`pos-x-value-${this.id}`);
+                    increment = 0.1; // Fine adjustment
+                    this.position.x = Math.max(parseFloat(slider.min), Math.min(parseFloat(slider.max), this.position.x + (direction * increment)));
+                    slider.value = this.position.x;
+                    valueElement.textContent = this.position.x.toFixed(2);
+                } else if (axis === 'y') {
+                    slider = document.getElementById(`pos-y-${this.id}`);
+                    valueElement = document.getElementById(`pos-y-value-${this.id}`);
+                    increment = 0.1; // Fine adjustment
+                    this.position.y = Math.max(parseFloat(slider.min), Math.min(parseFloat(slider.max), this.position.y + (direction * increment)));
+                    slider.value = this.position.y;
+                    valueElement.textContent = this.position.y.toFixed(2);
+                } else if (axis === 'z') {
+                    slider = document.getElementById(`pos-z-${this.id}`);
+                    valueElement = document.getElementById(`pos-z-value-${this.id}`);
+                    increment = 0.1; // Fine adjustment
+                    this.position.z = Math.max(parseFloat(slider.min), Math.min(parseFloat(slider.max), this.position.z + (direction * increment)));
+                    slider.value = this.position.z;
+                    valueElement.textContent = this.position.z.toFixed(2);
+                } else if (axis === 'size-x') {
+                    slider = document.getElementById(`size-x-${this.id}`);
+                    valueElement = document.getElementById(`size-x-value-${this.id}`);
+                    increment = 0.1; // Fine adjustment
+                    this.size.x = Math.max(parseFloat(slider.min), Math.min(parseFloat(slider.max), this.size.x + (direction * increment)));
+                    slider.value = this.size.x;
+                    valueElement.textContent = this.size.x.toFixed(2);
+                } else if (axis === 'size-y') {
+                    slider = document.getElementById(`size-y-${this.id}`);
+                    valueElement = document.getElementById(`size-y-value-${this.id}`);
+                    increment = 0.1; // Fine adjustment
+                    this.size.y = Math.max(parseFloat(slider.min), Math.min(parseFloat(slider.max), this.size.y + (direction * increment)));
+                    slider.value = this.size.y;
+                    valueElement.textContent = this.size.y.toFixed(2);
+                } else if (axis === 'size-z') {
+                    slider = document.getElementById(`size-z-${this.id}`);
+                    valueElement = document.getElementById(`size-z-value-${this.id}`);
+                    increment = 0.1; // Fine adjustment
+                    this.size.z = Math.max(parseFloat(slider.min), Math.min(parseFloat(slider.max), this.size.z + (direction * increment)));
+                    slider.value = this.size.z;
+                    valueElement.textContent = this.size.z.toFixed(2);
+                }
+                
+                this.updatePosition();
+                this.updateSize();
+            }
+            
+            updateRangeControls() {
+                const maxPos = this.extendedRange ? 16 : 10;
+                const maxSizeY = this.extendedRange ? 20 : 10;
+                
+                // Update position sliders
+                const posXSlider = document.getElementById(`pos-x-${this.id}`);
+                const posYSlider = document.getElementById(`pos-y-${this.id}`);
+                const posZSlider = document.getElementById(`pos-z-${this.id}`);
+                
+                posXSlider.min = -maxPos;
+                posXSlider.max = maxPos;
+                posXSlider.value = this.position.x;
+                
+                posYSlider.min = -maxPos;
+                posYSlider.max = maxPos;
+                posYSlider.value = this.position.y;
+                
+                posZSlider.min = -maxPos;
+                posZSlider.max = maxPos;
+                posZSlider.value = this.position.z;
+                
+                // Update size Y slider
+                const sizeYSlider = document.getElementById(`size-y-${this.id}`);
+                sizeYSlider.min = 0.1;
+                sizeYSlider.max = maxSizeY;
+                sizeYSlider.value = this.size.y;
+                
+                // Update label
+                const label = document.querySelector(`label[for="extended-range-${this.id}"]`);
+                if (label) {
+                    label.textContent = `Extended Range (Pos: ±${maxPos}, Size Y: ±${maxSizeY})`;
+                }
+            }
+            
+            copy() {
+                const newBox = new Box(
+                    boxIdCounter++,
+                    { 
+                        x: this.position.x + 0.5, 
+                        y: this.position.y + 0.5, 
+                        z: this.position.z + 0.5 
+                    },
+                    { ...this.size },
+                    this.color
+                );
+                newBox.extendedRange = this.extendedRange;
+                newBox.updateRangeControls();
+                boxes.push(newBox);
+                showNotification(`Box ${this.id} copied as Box ${newBox.id}`);
+            }
+            
+            delete() {
+                // Remove from scene
+                scene.remove(this.mesh);
+                this.geometry.dispose();
+                this.material.dispose();
+                this.wireframeGeometry.dispose();
+                this.wireframeMaterial.dispose();
+                
+                // Remove from boxes array
+                const index = boxes.findIndex(b => b.id === this.id);
+                if (index !== -1) {
+                    boxes.splice(index, 1);
+                }
+                
+                // Remove control panel
+                const control = document.getElementById(`box-control-${this.id}`);
+                if (control) {
+                    control.remove();
+                }
+            }
+            
+            getVertices() {
+                // Get the 8 vertices of the box in world space
+                const vertices = [];
+                const halfSize = {
+                    x: this.size.x / 2,
+                    y: this.size.y / 2,
+                    z: this.size.z / 2
+                };
+                
+                // Local space vertices
+                const localVertices = [
+                    new THREE.Vector3(-halfSize.x, -halfSize.y, -halfSize.z),
+                    new THREE.Vector3(halfSize.x, -halfSize.y, -halfSize.z),
+                    new THREE.Vector3(halfSize.x, halfSize.y, -halfSize.z),
+                    new THREE.Vector3(-halfSize.x, halfSize.y, -halfSize.z),
+                    new THREE.Vector3(-halfSize.x, -halfSize.y, halfSize.z),
+                    new THREE.Vector3(halfSize.x, -halfSize.y, halfSize.z),
+                    new THREE.Vector3(halfSize.x, halfSize.y, halfSize.z),
+                    new THREE.Vector3(-halfSize.x, halfSize.y, halfSize.z)
+                ];
+                
+                // Transform to world space
+                localVertices.forEach(v => {
+                    v.applyMatrix4(this.mesh.matrixWorld);
+                    vertices.push(v);
+                });
+                
+                return vertices;
+            }
+            
+            checkNarrowAspect() {
+                // Check if the box has a narrow aspect ratio
+                const sortedSizes = [this.size.x, this.size.y, this.size.z].sort((a, b) => a - b);
+                return sortedSizes[2] / sortedSizes[0] > 5; // If the largest dimension is 5x the smallest
+            }
+        }
+        
+        // Get points inside a box from the model
+        function getPointsInBox(box) {
+            if (!station) return [];
+            
+            const points = [];
+            const boxVertices = box.getVertices();
+            
+            // Create a bounding box for the box
+            const boxMin = new THREE.Vector3(
+                Math.min(...boxVertices.map(v => v.x)),
+                Math.min(...boxVertices.map(v => v.y)),
+                Math.min(...boxVertices.map(v => v.z))
+            );
+            
+            const boxMax = new THREE.Vector3(
+                Math.max(...boxVertices.map(v => v.x)),
+                Math.max(...boxVertices.map(v => v.y)),
+                Math.max(...boxVertices.map(v => v.z))
+            );
+            
+            // Traverse the model and collect points inside the box
+            station.traverse(child => {
+                if (child.isMesh && child.geometry) {
+                    const positions = child.geometry.attributes.position;
+                    if (positions) {
+                        const count = positions.count;
+                        // Sample points to avoid too many points
+                        const step = Math.max(1, Math.floor(count / 1000));
+                        
+                        for (let i = 0; i < count; i += step) {
+                            const x = positions.getX(i);
+                            const y = positions.getY(i);
+                            const z = positions.getZ(i);
+                            
+                            // Transform to world space
+                            const point = new THREE.Vector3(x, y, z);
+                            point.applyMatrix4(child.matrixWorld);
+                            
+                            // Check if point is inside the box
+                            if (point.x >= boxMin.x && point.x <= boxMax.x &&
+                                point.y >= boxMin.y && point.y <= boxMax.y &&
+                                point.z >= boxMin.z && point.z <= boxMax.z) {
+                                points.push(point);
+                            }
+                        }
+                    }
+                }
+            });
+            
+            return points;
+        }
+        
+        // Sample points from an array
+        function samplePointsFromArray(points, count) {
+            if (points.length <= count) return points;
+            const sampled = [];
+            const usedIndices = new Set();
+            while(sampled.length < count) {
+                const index = Math.floor(Math.random() * points.length);
+                if (!usedIndices.has(index)) {
+                    usedIndices.add(index);
+                    sampled.push(points[index]);
+                }
+            }
+            return sampled;
+        }
+        
+        // Clear all existing hulls
+        function clearHulls() {
+            hulls.forEach(hull => {
+                scene.remove(hull.mesh);
+                hull.geometry.dispose();
+                hull.material.dispose();
+                if (hull.body) {
+                    world.removeBody(hull.body);
+                }
+            });
+            hulls = [];
+        }
+        
+        // Generate hulls for all boxes
+        function generateHulls() {
+            // Clear existing hulls
+            clearHulls();
+            
+            const sampleCount = parseInt(sampleCountSlider.value);
+            
+            boxes.forEach(box => {
+                const points = getPointsInBox(box);
+                
+                if (points.length < 4) {
+                    showNotification(`Box ${box.id} doesn't contain enough points. Using bounding box instead.`);
+                    // Use the box itself as the hull
+                    const hullGeometry = new THREE.BoxGeometry(box.size.x, box.size.y, box.size.z);
+                    const hullMaterial = new THREE.MeshBasicMaterial({ 
+                        color: box.color, 
+                        transparent: true, 
+                        opacity: parseFloat(hullOpacitySlider.value),
+                        wireframe: true
+                    });
+                    const hullMesh = new THREE.Mesh(hullGeometry, hullMaterial);
+                    hullMesh.position.set(box.position.x, box.position.y, box.position.z);
+                    scene.add(hullMesh);
+                    
+                    // Create corresponding physics body
+                    const shape = new CANNON.Box(new CANNON.Vec3(box.size.x/2, box.size.y/2, box.size.z/2));
+                    const body = new CANNON.Body({ mass: 0 });
+                    body.addShape(shape);
+                    body.position.set(box.position.x, box.position.y, box.position.z);
+                    world.addBody(body);
+                    
+                    hulls.push({
+                        mesh: hullMesh,
+                        geometry: hullGeometry,
+                        material: hullMaterial,
+                        type: 'box',
+                        position: { ...box.position },
+                        size: { ...box.size },
+                        body: body
+                    });
+                } else if (box.checkNarrowAspect()) {
+                    showNotification(`Box ${box.id} has a narrow aspect ratio. Using bounding box instead.`);
+                    // Use the box itself as the hull
+                    const hullGeometry = new THREE.BoxGeometry(box.size.x, box.size.y, box.size.z);
+                    const hullMaterial = new THREE.MeshBasicMaterial({ 
+                        color: box.color, 
+                        transparent: true, 
+                        opacity: parseFloat(hullOpacitySlider.value),
+                        wireframe: true
+                    });
+                    const hullMesh = new THREE.Mesh(hullGeometry, hullMaterial);
+                    hullMesh.position.set(box.position.x, box.position.y, box.position.z);
+                    scene.add(hullMesh);
+                    
+                    // Create corresponding physics body
+                    const shape = new CANNON.Box(new CANNON.Vec3(box.size.x/2, box.size.y/2, box.size.z/2));
+                    const body = new CANNON.Body({ mass: 0 });
+                    body.addShape(shape);
+                    body.position.set(box.position.x, box.position.y, box.position.z);
+                    world.addBody(body);
+                    
+                    hulls.push({
+                        mesh: hullMesh,
+                        geometry: hullGeometry,
+                        material: hullMaterial,
+                        type: 'box',
+                        position: { ...box.position },
+                        size: { ...box.size },
+                        body: body
+                    });
+                } else {
+                    // Sample points for hull generation
+                    const sampledPoints = samplePointsFromArray(points, sampleCount);
+                    
+                    // Check if the points are effectively flat, which can cause the ConvexHull algorithm to fail
+                    const pointsBox = new THREE.Box3().setFromPoints(sampledPoints);
+                    const pointsSize = pointsBox.getSize(new THREE.Vector3());
+                    const epsilon = 1e-5; // A very small number
+                    const isFlat = pointsSize.x < epsilon || pointsSize.y < epsilon || pointsSize.z < epsilon;
+                    
+                    if (isFlat) {
+                        showNotification(`Box ${box.id} contains flat points. Using bounding box instead.`);
+                        // Use the box itself as the hull
+                        const hullGeometry = new THREE.BoxGeometry(box.size.x, box.size.y, box.size.z);
+                        const hullMaterial = new THREE.MeshBasicMaterial({ 
+                            color: box.color, 
+                            transparent: true, 
+                            opacity: parseFloat(hullOpacitySlider.value),
+                            wireframe: true
+                        });
+                        const hullMesh = new THREE.Mesh(hullGeometry, hullMaterial);
+                        hullMesh.position.set(box.position.x, box.position.y, box.position.z);
+                        scene.add(hullMesh);
+                        
+                        // Create corresponding physics body
+                        const shape = new CANNON.Box(new CANNON.Vec3(box.size.x/2, box.size.y/2, box.size.z/2));
+                        const body = new CANNON.Body({ mass: 0 });
+                        body.addShape(shape);
+                        body.position.set(box.position.x, box.position.y, box.position.z);
+                        world.addBody(body);
+                        
+                        hulls.push({
+                            mesh: hullMesh,
+                            geometry: hullGeometry,
+                            material: hullMaterial,
+                            type: 'box',
+                            position: { ...box.position },
+                            size: { ...box.size },
+                            body: body
+                        });
+                    } else {
+                        try {
+                            // Generate convex hull from points using ConvexGeometry
+                            const hullGeometry = new ConvexGeometry(sampledPoints);
+                            const hullMaterial = new THREE.MeshBasicMaterial({ 
+                                color: box.color, 
+                                transparent: true, 
+                                opacity: parseFloat(hullOpacitySlider.value),
+                                wireframe: true
+                            });
+                            const hullMesh = new THREE.Mesh(hullGeometry, hullMaterial);
+                            
+                            // Fix for disappearing hulls: disable frustum culling and compute bounding box
+                            hullMesh.frustumCulled = false;
+                            hullGeometry.computeBoundingBox();
+                            hullGeometry.computeBoundingSphere();
+                            
+                            scene.add(hullMesh);
+                            
+                            // Create corresponding physics body
+                            const vertices = [];
+                            const faces = [];
+                            
+                            // Extract vertices from the geometry
+                            const positionAttribute = hullGeometry.attributes.position;
+                            for (let i = 0; i < positionAttribute.count; i++) {
+                                vertices.push(new CANNON.Vec3(
+                                    positionAttribute.getX(i),
+                                    positionAttribute.getY(i),
+                                    positionAttribute.getZ(i)
+                                ));
+                            }
+                            
+                            // Extract faces from the geometry
+                            const indexAttribute = hullGeometry.index;
+                            if (indexAttribute) {
+                                for (let i = 0; i < indexAttribute.count; i += 3) {
+                                    faces.push([
+                                        indexAttribute.getX(i),
+                                        indexAttribute.getX(i + 1),
+                                        indexAttribute.getX(i + 2)
+                                    ]);
+                                }
+                            } else {
+                                // If there's no index, assume the vertices are defined in triples
+                                for (let i = 0; i < vertices.length; i += 3) {
+                                    faces.push([i, i + 1, i + 2]);
+                                }
+                            }
+                            
+                            const shape = new CANNON.ConvexPolyhedron({
+                                vertices: vertices,
+                                faces: faces
+                            });
+                            
+                            const body = new CANNON.Body({ mass: 0 });
+                            body.addShape(shape);
+                            world.addBody(body);
+                            
+                            hulls.push({
+                                mesh: hullMesh,
+                                geometry: hullGeometry,
+                                material: hullMaterial,
+                                type: 'convex',
+                                vertices: sampledPoints,
+                                body: body
+                            });
+                        } catch (error) {
+                            console.error(`Could not generate convex hull for box ${box.id}. Error:`, error);
+                            showNotification(`Could not generate convex hull for box ${box.id}. Using bounding box instead.`);
+                            
+                            // Use the box itself as the hull
+                            const hullGeometry = new THREE.BoxGeometry(box.size.x, box.size.y, box.size.z);
+                            const hullMaterial = new THREE.MeshBasicMaterial({ 
+                                color: box.color, 
+                                transparent: true, 
+                                opacity: parseFloat(hullOpacitySlider.value),
+                                wireframe: true
+                            });
+                            const hullMesh = new THREE.Mesh(hullGeometry, hullMaterial);
+                            hullMesh.position.set(box.position.x, box.position.y, box.position.z);
+                            scene.add(hullMesh);
+                            
+                            // Create corresponding physics body
+                            const shape = new CANNON.Box(new CANNON.Vec3(box.size.x/2, box.size.y/2, box.size.z/2));
+                            const body = new CANNON.Body({ mass: 0 });
+                            body.addShape(shape);
+                            body.position.set(box.position.x, box.position.y, box.position.z);
+                            world.addBody(body);
+                            
+                            hulls.push({
+                                mesh: hullMesh,
+                                geometry: hullGeometry,
+                                material: hullMaterial,
+                                type: 'box',
+                                position: { ...box.position },
+                                size: { ...box.size },
+                                body: body
+                            });
+                        }
+                    }
+                }
+            });
+            
+            showNotification("Hulls generated successfully!");
+        }
+        
+        // Export hulls as JSON
+        function exportHulls() {
+            const data = {
+                boxes: boxes.map(box => ({
+                    id: box.id,
+                    position: box.position,
+                    size: box.size,
+                    color: box.color,
+                    extendedRange: box.extendedRange
+                })),
+                hulls: hulls.map(hull => {
+                    if (hull.type === 'box') {
+                        return {
+                            type: 'box',
+                            position: hull.position,
+                            size: hull.size
+                        };
+                    } else {
+                        // Extract vertices from the geometry
+                        const vertices = [];
+                        const positionAttribute = hull.geometry.attributes.position;
+                        for (let i = 0; i < positionAttribute.count; i++) {
+                            vertices.push({
+                                x: positionAttribute.getX(i),
+                                y: positionAttribute.getY(i),
+                                z: positionAttribute.getZ(i)
+                            });
+                        }
+                        
+                        // Extract faces from the geometry
+                        const faces = [];
+                        const indexAttribute = hull.geometry.index;
+                        if (indexAttribute) {
+                            for (let i = 0; i < indexAttribute.count; i += 3) {
+                                faces.push([
+                                    indexAttribute.getX(i),
+                                    indexAttribute.getX(i + 1),
+                                    indexAttribute.getX(i + 2)
+                                ]);
+                            }
+                        } else {
+                            // If there's no index, assume the vertices are defined in triples
+                            for (let i = 0; i < vertices.length; i += 3) {
+                                faces.push([i, i + 1, i + 2]);
+                            }
+                        }
+                        
+                        return {
+                            type: 'convex',
+                            vertices: vertices,
+                            faces: faces
+                        };
+                    }
+                })
+            };
+            
+            const json = JSON.stringify(data, null, 2);
+            const blob = new Blob([json], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'convex-hulls.json';
+            a.click();
+            URL.revokeObjectURL(url);
+            
+            showNotification("Hulls exported successfully!");
+        }
+        
+        // Import hulls from JSON
+        function importHulls(jsonData) {
+            try {
+                const data = JSON.parse(jsonData);
+                
+                // Clear existing boxes and hulls
+                boxes.forEach(box => {
+                    scene.remove(box.mesh);
+                    box.geometry.dispose();
+                    box.material.dispose();
+                    box.wireframeGeometry.dispose();
+                    box.wireframeMaterial.dispose();
+                });
+                boxes = [];
+                
+                clearHulls();
+                
+                // Clear control panels
+                document.getElementById('boxes-container').innerHTML = '';
+                
+                // Load boxes
+                if (data.boxes) {
+                    data.boxes.forEach(boxData => {
+                        const box = new Box(
+                            boxData.id,
+                            boxData.position,
+                            boxData.size,
+                            boxData.color
+                        );
+                        box.extendedRange = boxData.extendedRange || false;
+                        box.updateRangeControls();
+                        boxes.push(box);
+                        
+                        // Update box ID counter
+                        if (boxData.id >= boxIdCounter) {
+                            boxIdCounter = boxData.id + 1;
+                        }
+                    });
+                }
+                
+                // Load hulls
+                if (data.hulls) {
+                    data.hulls.forEach(hullData => {
+                        if (hullData.type === 'box') {
+                            const hullGeometry = new THREE.BoxGeometry(
+                                hullData.size.x,
+                                hullData.size.y,
+                                hullData.size.z
+                            );
+                            const hullMaterial = new THREE.MeshBasicMaterial({ 
+                                color: 0xff0000, 
+                                transparent: true, 
+                                opacity: parseFloat(hullOpacitySlider.value),
+                                wireframe: true
+                            });
+                            const hullMesh = new THREE.Mesh(hullGeometry, hullMaterial);
+                            hullMesh.position.set(
+                                hullData.position.x,
+                                hullData.position.y,
+                                hullData.position.z
+                            );
+                            scene.add(hullMesh);
+                            
+                            // Create corresponding physics body
+                            const shape = new CANNON.Box(new CANNON.Vec3(
+                                hullData.size.x/2, 
+                                hullData.size.y/2, 
+                                hullData.size.z/2
+                            ));
+                            const body = new CANNON.Body({ mass: 0 });
+                            body.addShape(shape);
+                            body.position.set(
+                                hullData.position.x,
+                                hullData.position.y,
+                                hullData.position.z
+                            );
+                            world.addBody(body);
+                            
+                            hulls.push({
+                                mesh: hullMesh,
+                                geometry: hullGeometry,
+                                material: hullMaterial,
+                                type: 'box',
+                                position: hullData.position,
+                                size: hullData.size,
+                                body: body
+                            });
+                        } else if (hullData.type === 'convex') {
+                            // Convert vertices back to THREE.Vector3
+                            const vertices = hullData.vertices.map(v => new THREE.Vector3(v.x, v.y, v.z));
+                            
+                            try {
+                                const hullGeometry = new ConvexGeometry(vertices);
+                                const hullMaterial = new THREE.MeshBasicMaterial({ 
+                                    color: 0xff0000, 
+                                    transparent: true, 
+                                    opacity: parseFloat(hullOpacitySlider.value),
+                                    wireframe: true
+                                });
+                                const hullMesh = new THREE.Mesh(hullGeometry, hullMaterial);
+                                
+                                // Fix for disappearing hulls: disable frustum culling and compute bounding box
+                                hullMesh.frustumCulled = false;
+                                hullGeometry.computeBoundingBox();
+                                hullGeometry.computeBoundingSphere();
+                                
+                                scene.add(hullMesh);
+                                
+                                // Create corresponding physics body
+                                const cannonVertices = hullData.vertices.map(v => new CANNON.Vec3(v.x, v.y, v.z));
+                                const faces = hullData.faces;
+                                
+                                const shape = new CANNON.ConvexPolyhedron({
+                                    vertices: cannonVertices,
+                                    faces: faces
+                                });
+                                
+                                const body = new CANNON.Body({ mass: 0 });
+                                body.addShape(shape);
+                                world.addBody(body);
+                                
+                                hulls.push({
+                                    mesh: hullMesh,
+                                    geometry: hullGeometry,
+                                    material: hullMaterial,
+                                    type: 'convex',
+                                    vertices: vertices,
+                                    body: body
+                                });
+                            } catch (error) {
+                                console.error('Error importing convex hull:', error);
+                                showNotification("Error importing convex hull. Check console for details.");
+                            }
+                        }
+                    });
+                }
+                
+                showNotification("Hulls imported successfully!");
+            } catch (error) {
+                console.error('Error importing hulls:', error);
+                showNotification("Error importing hulls. Check console for details.");
+            }
+        }
+        
+        // Show notification
+        function showNotification(message) {
+            const notification = document.getElementById('notification');
+            notification.textContent = message;
+            notification.style.display = 'block';
+            
+            setTimeout(() => {
+                notification.style.display = 'none';
+            }, 3000);
+        }
+        
+        // Event listeners
+        document.getElementById('add-box').addEventListener('click', () => {
+            const box = new Box(boxIdCounter++);
+            boxes.push(box);
+        });
+        
+        document.getElementById('generate-hulls').addEventListener('click', generateHulls);
+        document.getElementById('export-hulls').addEventListener('click', exportHulls);
+        
+        document.getElementById('file-input').addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    importHulls(event.target.result);
+                };
+                reader.readAsText(file);
+            }
+        });
+        
+        // Window resize handler
+        window.addEventListener('resize', () => {
+            camera.aspect = (window.innerWidth - 320) / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth - 320, window.innerHeight);
+        });
+        
+        // Animation loop
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            
+            // Update physics
+            world.step(1/60);
+            
+            // Sync physics bodies with visual meshes
+            hulls.forEach(hull => {
+                if (hull.body) {
+                    hull.mesh.position.copy(hull.body.position);
+                    hull.mesh.quaternion.copy(hull.body.quaternion);
+                }
+            });
+            
+            renderer.render(scene, camera);
+        }
+        
+        animate();
+        
+        // Add initial box
+        const initialBox = new Box(boxIdCounter++);
+        boxes.push(initialBox);
+        
+        // Show initial notification
+        showNotification("Welcome! Load your model and start creating convex hulls.");
+    </script>
+</body>
+</html>

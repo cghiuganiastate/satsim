@@ -1,0 +1,1476 @@
+import * as THREE from 'three';
+import { STLLoader } from 'three/addons/loaders/STLLoader.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import * as CANNON from 'cannon-es';
+import { CameraSystem } from './CameraSystem.js';
+import initializeThrusters, { initializeThrustersWithConfig } from './thrusterSetup.js';
+import { 
+  initializeUI,
+  updateUI,
+  toggleUIVisibility,
+  updateUIText
+} from './hudUpdater.js';
+import { loadConvexHulls, toggleHullVisibility } from './hullManager.js';
+import { 
+  loadSpacecraft, 
+  toggleSpacecraftBoundingBoxVisibility, 
+  getSpacecraftBody, 
+  getSpacecraftMesh, 
+  updateSpacecraft,
+  updateSatelliteMass,
+  consumeFuel,
+  getFuelStatus,
+  resetFuel,
+  setFuelProperties
+} from './spacecraftManager.js';
+import { AttitudeControlSystem } from './attitudeControl.js';
+import { LampManager } from './lampManager.js';
+
+// Wait for the startSimulation event before initializing
+window.addEventListener('startSimulation', () => {
+  initSimulation();
+});
+
+function initSimulation() {
+  const DEFAULT_MODEL_PATH = 'navion.stl';
+  const CONVEX_HULLS_PATH = 'convex-hulls.json';
+
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x000011);
+  const skyboxLoader = new THREE.CubeTextureLoader();
+  const skybox = skyboxLoader.load([
+    'right.png', 'left.png', 'top.png', 'bottom.png', 'front.png', 'back.png'
+  ]);
+  scene.background = skybox;
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true, shadowMap: true });
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap; // Soft, smoother shadows
+  renderer.outputColorSpace = THREE.SRGBColorSpace; // Better color output
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  document.getElementById('simulation-container').appendChild(renderer.domElement);
+
+  const world = new CANNON.World();
+  world.gravity.set(0, 0, 0);
+  world.broadphase = new CANNON.NaiveBroadphase();
+  world.solver.iterations = 10;
+
+  let satBody;
+  let satMesh;
+  let camSys;
+  let attitudeControl;
+  let lampManager;
+  let station;
+  let defaultProperties = null;
+  
+  // Timer for debug output
+  let lastInertiaDebugTime = 0;
+  const INERTIA_DEBUG_INTERVAL = 10000; // 10 seconds in milliseconds
+  
+  let showDistanceInfo = false;
+  let raycaster = new THREE.Raycaster();
+  let maxDistance = 100;
+  
+  let fineControlMode = false;
+  let fineControlKeys = {};
+  let fineControlProcessedKeys = {};
+  let fineControlKeyStartTimes = {};
+  let timedFiringEnabled = false;
+  let firingDuration = 5.0;
+  let torquePercentage = 50; // Percentage of max torque to use (1-100)
+  
+  let initialPosition = new CANNON.Vec3(0, -3, 5.5);
+  let initialOrientation = new CANNON.Quaternion();
+  initialOrientation.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), -Math.PI/2);
+  let initialOrientationThree = new THREE.Quaternion();
+  initialOrientationThree.setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI/2);
+  let isDocked = true; // Start docked
+  let canDock = false;
+  let hasLeftDockingBoxOnce = false;
+  
+  // Clock variables for tracking time since undock
+  let undockTime = null; // Timestamp when undocked
+  let clockDisplay = null; // Reference to clock display element
+  let pausedStartTime = null; // Timestamp when pause started
+  let accumulatedPausedTime = 0; // Total time spent paused since undock
+  let lastDockedTime = 0; // Time elapsed when last docked
+  let DOCKING_BOX_SIZE = 0.1;
+  let DOCKING_ANGLE_THRESHOLD = 3;
+  const MAX_ANGULAR_SPEED = 1.0;
+  const MAX_XZ_SPEED = 0.1;
+  const MAX_Z_SPEED = 1.0;
+
+  // --- Second spacecraft (static target) variables ---
+  let secondSpacecraftBody = null;
+  let secondSpacecraftMesh = null;
+  let secondSpacecraftLoaded = false;
+
+  // Docking zones registry — each entry: { position, orientation, dockingBoxSize, dockingAngleThreshold, name }
+  let dockingZones = [];
+
+  // Debug visuals for docking-zone acceptance boxes (toggled with ` + b)
+  let dockingBoxVisuals = [];
+  let dockingBoxesVisible = false;
+
+  // Which docking zone the HUD displays info for (cycled with ` + z).
+  // The actual docking logic still checks ALL zones; this only affects display.
+  let selectedDockingZoneIndex = 0;
+
+  window.scene = scene;
+  window.world = world;
+  window.renderer = renderer;
+
+  // Helper function to normalize configuration to unified format
+  function normalizeConfiguration(config) {
+    const normalized = {
+      spacecraftProperties: config.spacecraftProperties || { dryMass: 5, fuelMass: 5, maxFuelMass: 5, inertia: { x: 3, y: 3, z: 3 } },
+      cameras: Array.isArray(config.cameras) ? config.cameras : (config.cameras?.cameras || []),
+      cmg: { cmgs: Array.isArray(config.cmg) ? config.cmg : (config.cmg?.cmgs || []) },
+      lamps: { lamps: Array.isArray(config.lamps) ? config.lamps : (config.lamps?.lamps || []) },
+      reactionwheels: { wheels: Array.isArray(config.reactionwheels) ? config.reactionwheels : (config.reactionwheels?.wheels || []) },
+      thrusters: { thrusters: Array.isArray(config.thrusters) ? config.thrusters : (config.thrusters?.thrusters || []) }
+    };
+    
+    // Handle CMG format: if config.cmg has a 'cmg' property (single CMG object), convert to cmgs array
+    if (config.cmg && config.cmg.cmg) {
+      normalized.cmg = { cmgs: [config.cmg.cmg] };
+    }
+    
+    // Preserve model data if present (for editor compatibility)
+    if (config.model) {
+      normalized.model = config.model;
+    }
+    
+    return normalized;
+  }
+
+  // Helper function to get configuration from uploaded files or defaults
+  async function getConfiguration() {
+    if (window.uploadedFiles && window.uploadedFiles.config) {
+      console.log('Using uploaded configuration');
+      return normalizeConfiguration(window.uploadedFiles.config);
+    }
+    
+    // Load default configuration if no uploaded config
+    try {
+      const response = await fetch('config.json');
+      if (!response.ok) {
+        throw new Error(`Failed to load default config: ${response.statusText}`);
+      }
+      const data = await response.json();
+      console.log('Using default configuration');
+      return normalizeConfiguration(data);
+    } catch (error) {
+      console.error('Error loading default configuration:', error);
+      // Return minimal default configuration
+      return {
+        cameras: [],
+        cmg: { cmgs: [] },
+        spacecraftProperties: { dryMass: 5, fuelMass: 5, maxFuelMass: 5, inertia: { x: 3, y: 3, z: 3 } },
+        lamps: { lamps: [] },
+        reactionwheels: { wheels: [] },
+        thrusters: { thrusters: [] }
+      };
+    }
+  }
+
+  // Helper function to get spacecraft model
+  async function getSpacecraftModel() {
+    if (window.uploadedFiles && window.uploadedFiles.spacecraftModel) {
+      console.log('Using uploaded spacecraft model - centroiding disabled');
+      // Create a File object from the uploaded model data
+      const blob = new Blob([window.uploadedFiles.spacecraftModel], { type: 'model/stl' });
+      return { 
+        file: new File([blob], 'custom.stl', { type: 'model/stl' }), 
+        isDefault: false 
+      };
+    }
+    
+    // Load default model
+    try {
+      const response = await fetch(DEFAULT_MODEL_PATH);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch default model: ${response.statusText}`);
+      }
+      const blob = await response.blob();
+      console.log('Using default spacecraft model - centroiding enabled');
+      return { 
+        file: new File([blob], DEFAULT_MODEL_PATH, { type: 'model/stl' }), 
+        isDefault: true 
+      };
+    } catch (error) {
+      console.error('Error loading default model:', error);
+      throw error;
+    }
+  }
+
+  async function initializeDefaultSpacecraft() {
+    const config = await getConfiguration();
+    const modelData = await getSpacecraftModel();
+    const modelFile = modelData.file;
+    
+    // Use centroiding only for default model, not for uploaded models
+    const centroidModel = modelData.isDefault;
+    
+    // DEBUG: Log the loaded configuration
+    console.log("DEBUG: Configuration loaded:", config);
+
+    // Load initial position/orientation from uploaded file if available
+    if (window.uploadedFiles && window.uploadedFiles.initialPosition) {
+      const posData = window.uploadedFiles.initialPosition;
+      initialPosition = new CANNON.Vec3(posData.position.x, posData.position.y, posData.position.z);
+      initialOrientation = new CANNON.Quaternion(posData.orientation.x, posData.orientation.y, posData.orientation.z, posData.orientation.w);
+      initialOrientationThree = new THREE.Quaternion(posData.orientation.x, posData.orientation.y, posData.orientation.z, posData.orientation.w);
+      
+      // Load docking parameters if available in the file
+      if (posData.dockingBoxSize !== undefined) {
+        DOCKING_BOX_SIZE = posData.dockingBoxSize;
+        console.log("Using imported docking box size:", DOCKING_BOX_SIZE);
+      }
+      if (posData.dockingAngleThreshold !== undefined) {
+        DOCKING_ANGLE_THRESHOLD = posData.dockingAngleThreshold;
+        console.log("Using imported docking angle threshold:", DOCKING_ANGLE_THRESHOLD);
+      }
+      
+      console.log("Using imported initial position/orientation:", posData);
+    } else {
+      console.log("Using default initial position/orientation");
+    }
+
+    const rotation = { x: 0, y: 0, z: 0 };
+
+    loadSpacecraft(modelFile, scene, world, rotation, centroidModel, config.spacecraftProperties, (body, mesh) => {
+      satBody = body;
+      satMesh = mesh;
+      
+      // DEBUG: Log the inertia of the body immediately after it's returned
+      console.log("DEBUG: Inertia on returned satBody:", {
+        x: satBody.inertia.x,
+        y: satBody.inertia.y,
+        z: satBody.inertia.z
+      });
+      
+      // Get centerOfMass offset from the body
+      const centerOfMassOffset = satBody.centerOfMassOffset || {x: 0, y: 0, z: 0};
+      console.log("DEBUG: Center of mass offset:", centerOfMassOffset);
+      
+      window.satBody = satBody;
+      window.satMesh = satMesh;
+      
+      satBody.position.copy(initialPosition);
+      satBody.quaternion.copy(initialOrientation);
+      satMesh.position.copy(initialPosition);
+      satMesh.quaternion.copy(initialOrientation);
+      
+      // Store centerOfMass in spacecraft mesh for cameras to access
+      satMesh.userData.centerOfMassOffset = centerOfMassOffset;
+      
+      // Ensure velocity and angular velocity are zero at start
+      satBody.velocity.set(0, 0, 0);
+      satBody.angularVelocity.set(0, 0, 0);
+
+      camSys = new CameraSystem(renderer, satMesh);
+      window.camSys = camSys;
+      
+      attitudeControl = new AttitudeControlSystem(satBody, scene);
+      attitudeControl.setSatelliteMesh(satMesh);
+      attitudeControl.setCenterOfMassOffset(centerOfMassOffset);
+      
+      lampManager = new LampManager(scene, satMesh);
+      lampManager.setCenterOfMassOffset(centerOfMassOffset);
+
+      // Load docking port
+      loadDockingPort();
+
+      // Register the primary docking zone (original docking port location)
+      registerDockingZone({
+        position: new CANNON.Vec3(initialPosition.x, initialPosition.y, initialPosition.z),
+        orientation: initialOrientationThree,
+        dockingBoxSize: DOCKING_BOX_SIZE,
+        dockingAngleThreshold: DOCKING_ANGLE_THRESHOLD,
+        name: 'primary'
+      });
+
+      // Load the second (static) spacecraft + its docking port
+      loadSecondSpacecraft();
+
+      main(config);
+    });
+  }
+
+  // Function to load docking port
+  function loadDockingPort() {
+    // Check if user uploaded a docking port model
+    if (window.uploadedFiles && window.uploadedFiles.dockingPort) {
+      // Use uploaded file
+      const blob = new Blob([window.uploadedFiles.dockingPort], { type: 'model/stl' });
+      const file = new File([blob], 'dockingport.stl', { type: 'model/stl' });
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const geometry = new STLLoader().parse(e.target.result);
+        createDockingPort(geometry);
+      };
+      reader.readAsArrayBuffer(file);
+    } else {
+      // Create default docking port if no file is provided
+      const geometry = new THREE.BoxGeometry(0.2, 0.2, 0.2);
+      createDockingPort(geometry);
+    }
+  }
+
+  // Function to create docking port
+  // Function to create docking port
+function createDockingPort(geometry) {
+  // Create the visual mesh (the solid model you see)
+  const material = new THREE.MeshStandardMaterial({ 
+    color: 0x00ff00,
+    metalness: 0.7,
+    roughness: 0.3
+  });
+  const dockingPortMesh = new THREE.Mesh(geometry, material);
+  dockingPortMesh.position.set(0, -2, 5.5);
+  dockingPortMesh.castShadow = true;
+  dockingPortMesh.receiveShadow = true;
+  scene.add(dockingPortMesh);
+
+  // --- Create a simple bounding box for collision ---
+
+  // 1. Calculate the bounding box of the loaded geometry
+  geometry.computeBoundingBox();
+  const box = new THREE.Box3().setFromBufferAttribute(geometry.attributes.position);
+  
+  // 2. Get the size of the box
+  const size = new THREE.Vector3();
+  box.getSize(size);
+
+  // 3. Get the center of the geometry to calculate the offset
+  const center = new THREE.Vector3();
+  box.getCenter(center);
+  
+  // 4. Calculate the offset position: desired world position + geometry center offset
+  const offsetX = 0 + center.x;  // 0 is the desired world X position
+  const offsetY = -2 + center.y; // -2 is the desired world Y position
+  const offsetZ = 5.5 + center.z; // 5.5 is the desired world Z position
+
+  // 5. Create the CANNON.Box shape using the box's half-extents
+  const halfExtents = new CANNON.Vec3(size.x / 2, size.y / 2, size.z / 2);
+  const boxShape = new CANNON.Box(halfExtents);
+
+  // 6. Create the physics body at the offset position
+  const dockingPortBody = new CANNON.Body({
+    mass: 0, // static
+    position: new CANNON.Vec3(offsetX, offsetY, offsetZ)
+  });
+  dockingPortBody.addShape(boxShape);
+  world.addBody(dockingPortBody);
+
+  // 7. Create the visual representation of the collision box (the red wireframe)
+  const collisionGeometry = new THREE.BoxGeometry(size.x, size.y, size.z);
+  const collisionMaterial = new THREE.MeshBasicMaterial({
+    color: 0xff0000,
+    transparent: true,
+    opacity: 0.3,
+    wireframe: true
+  });
+  const dockingPortCollisionMesh = new THREE.Mesh(collisionGeometry, collisionMaterial);
+  dockingPortCollisionMesh.position.set(offsetX, offsetY, offsetZ);
+  dockingPortCollisionMesh.visible = false; // Initially hidden
+  dockingPortCollisionMesh.castShadow = false;
+  dockingPortCollisionMesh.receiveShadow = false;
+  scene.add(dockingPortCollisionMesh);
+
+  // Store references globally
+  window.dockingPortMesh = dockingPortMesh; // The green model
+  window.dockingPortBody = dockingPortBody; // The physics body
+  window.dockingPortCollisionMesh = dockingPortCollisionMesh; // The red wireframe box
+}
+
+  // ===========================================================================
+  // SECOND SPACECRAFT (STATIC TARGET) LOADING
+  // ===========================================================================
+  // The second spacecraft uses the SAME position/orientation file format as the
+  // primary spacecraft. The docking port is part of its model STL, so SC2's
+  // docking zone is simply its position + orientation. There is no separate
+  // second docking port upload.
+
+  // Load the second (static) spacecraft model + physics body
+  function loadSecondSpacecraft() {
+    // Default placement if no file uploaded
+    let pos = new CANNON.Vec3(10, 0, -10);
+    let quat = new CANNON.Quaternion(0, 0, 0, 1);
+    let quatThree = new THREE.Quaternion(0, 0, 0, 1);
+    let dockingBoxSize = 0.1;
+    let dockingAngleThreshold = 3;
+
+    // The exported position file format (identical to SC1) is reused here.
+    if (window.uploadedFiles && window.uploadedFiles.secondPosition) {
+      const posData = window.uploadedFiles.secondPosition;
+      pos = new CANNON.Vec3(posData.position.x, posData.position.y, posData.position.z);
+      quat = new CANNON.Quaternion(posData.orientation.x, posData.orientation.y, posData.orientation.z, posData.orientation.w);
+      quatThree = new THREE.Quaternion(posData.orientation.x, posData.orientation.y, posData.orientation.z, posData.orientation.w);
+      if (posData.dockingBoxSize !== undefined) dockingBoxSize = posData.dockingBoxSize;
+      if (posData.dockingAngleThreshold !== undefined) dockingAngleThreshold = posData.dockingAngleThreshold;
+      console.log("Second spacecraft placement loaded:", posData);
+    } else {
+      console.log("No second spacecraft position file — using default placement");
+    }
+
+    const stlLoader = new STLLoader();
+
+    const buildBody = (geometry) => {
+      const material = new THREE.MeshStandardMaterial({ color: 0x9966ff, metalness: 0.6, roughness: 0.4 });
+      const mesh = new THREE.Mesh(geometry, material);
+      mesh.position.copy(pos);
+      mesh.quaternion.copy(quatThree);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      scene.add(mesh);
+      secondSpacecraftMesh = mesh;
+
+      // Compute bounding box for a simple static collision box
+      geometry.computeBoundingBox();
+      const box = new THREE.Box3().setFromBufferAttribute(geometry.attributes.position);
+      const size = new THREE.Vector3();
+      box.getSize(size);
+      const center = new THREE.Vector3();
+      box.getCenter(center);
+
+      const halfExtents = new CANNON.Vec3(size.x / 2, size.y / 2, size.z / 2);
+      const shape = new CANNON.Box(halfExtents);
+
+      const body = new CANNON.Body({
+        mass: 0, // STATIC
+        position: new CANNON.Vec3(pos.x + center.x, pos.y + center.y, pos.z + center.z)
+      });
+      body.quaternion.copy(quat);
+      body.addShape(shape);
+      world.addBody(body);
+      secondSpacecraftBody = body;
+
+      // Helpful axes
+      const axes = new THREE.AxesHelper(2);
+      axes.position.copy(pos);
+      axes.quaternion.copy(quatThree);
+      scene.add(axes);
+
+      secondSpacecraftLoaded = true;
+      window.secondSpacecraftBody = secondSpacecraftBody;
+      window.secondSpacecraftMesh = secondSpacecraftMesh;
+
+      // The docking port is part of SC2's model. By default the docking zone
+      // is 2 meters below SC2's position (so SC1 isn't trying to dock inside
+      // SC2's collision box). A separate "docking location" file (same format
+      // as the position files) can override where SC1 must be to dock to SC2.
+      let zonePos = new CANNON.Vec3(pos.x, pos.y - 2, pos.z);
+      let zoneQuatThree = quatThree;
+      let zoneBoxSize = dockingBoxSize;
+      let zoneAngleThreshold = dockingAngleThreshold;
+
+      if (window.uploadedFiles && window.uploadedFiles.secondDockingLocation) {
+        const dockData = window.uploadedFiles.secondDockingLocation;
+        zonePos = new CANNON.Vec3(dockData.position.x, dockData.position.y, dockData.position.z);
+        zoneQuatThree = new THREE.Quaternion(
+          dockData.orientation.x, dockData.orientation.y, dockData.orientation.z, dockData.orientation.w
+        );
+        if (dockData.dockingBoxSize !== undefined) zoneBoxSize = dockData.dockingBoxSize;
+        if (dockData.dockingAngleThreshold !== undefined) zoneAngleThreshold = dockData.dockingAngleThreshold;
+        console.log("Second spacecraft docking location loaded:", dockData);
+      } else {
+        console.log("No second spacecraft docking location file — defaulting to 2 meters below SC2 position");
+      }
+
+      registerDockingZone({
+        position: zonePos,
+        orientation: zoneQuatThree,
+        dockingBoxSize: zoneBoxSize,
+        dockingAngleThreshold: zoneAngleThreshold,
+        name: 'secondSpacecraft'
+      });
+
+      console.log("Second spacecraft loaded at", pos);
+    };
+
+    if (window.uploadedFiles && window.uploadedFiles.secondSpacecraftModel) {
+      try {
+        const geometry = stlLoader.parse(window.uploadedFiles.secondSpacecraftModel);
+        buildBody(geometry);
+      } catch (err) {
+        console.error("Failed to parse second spacecraft STL, using fallback box:", err);
+        buildBody(new THREE.BoxGeometry(1, 1, 1));
+      }
+    } else {
+      // No model uploaded — use a simple fallback box so the feature still works
+      console.log("No second spacecraft model uploaded — using fallback box");
+      buildBody(new THREE.BoxGeometry(1, 1, 1));
+    }
+  }
+
+  // Register a docking zone (the spacecraft can dock at any registered zone)
+  function registerDockingZone(zone) {
+    dockingZones.push(zone);
+    console.log(`Registered docking zone "${zone.name}" at`, zone.position);
+  }
+
+  // Lazily build a wireframe box for each registered docking zone.
+  // The box represents the acceptance volume the spacecraft must occupy to dock
+  // (dockingBoxSize is a half-extent, so the full box is dockingBoxSize * 2).
+  function ensureDockingBoxVisuals() {
+    if (dockingBoxVisuals.length > 0 || dockingZones.length === 0) return;
+    dockingZones.forEach(zone => {
+      const fullSize = (zone.dockingBoxSize || 0.1) * 2;
+      const geo = new THREE.BoxGeometry(fullSize, fullSize, fullSize);
+      const mat = new THREE.MeshBasicMaterial({
+        color: 0xffff00,
+        wireframe: true,
+        transparent: true,
+        opacity: 0.8
+      });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.position.set(zone.position.x, zone.position.y, zone.position.z);
+      if (zone.orientation) mesh.quaternion.copy(zone.orientation);
+      mesh.visible = false;
+      scene.add(mesh);
+      dockingBoxVisuals.push(mesh);
+    });
+  }
+
+  // Toggle visibility of the docking zone acceptance boxes (` + b)
+  function toggleDockingBoxes() {
+    ensureDockingBoxVisuals();
+    dockingBoxesVisible = !dockingBoxesVisible;
+    for (const mesh of dockingBoxVisuals) {
+      mesh.visible = dockingBoxesVisible;
+    }
+    console.log(`Docking bounding boxes ${dockingBoxesVisible ? 'shown' : 'hidden'} (${dockingBoxVisuals.length} zone(s))`);
+  }
+
+  //const MODEL_PATH = 'gatewaycore.glb'; //testing
+  const MODEL_PATH = 'https://raw.githubusercontent.com/nasa/NASA-3D-Resources/11ebb4ee043715aefbba6aeec8a61746fad67fa7/3D%20Models/Gateway/Gateway%20Core.glb'; //deployed
+  const loader = new GLTFLoader();
+  loader.load(MODEL_PATH, gltf => {
+    station = gltf.scene;
+    station.scale.set(1,1,1);
+    let rot1 = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI/180*-25);
+    station.quaternion.multiply(rot1);
+    let rot2 = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI/180*-10);
+    station.quaternion.multiply(rot2);  
+    station.position.set(0, 0, 0);
+    station.traverse((child) => {
+      if (child.isMesh) {
+        child.receiveShadow = true;
+        child.castShadow = true;
+      }
+    });
+    scene.add(station);
+  }, undefined, err => console.error('GLTF load error:', err));
+
+// Reduced ambient light intensity to make shadows appear darker in shadowed areas
+scene.add(new THREE.AmbientLight(0x111111));
+  // Configure shadow properties for higher quality and better darkness in cast shadows
+  // Enhanced directional light with high-quality shadow casting
+  const dirLight = new THREE.DirectionalLight(0xffffff, 2.5);
+  dirLight.position.set(-10, -2, -1);
+  dirLight.castShadow = true;
+  dirLight.shadow.mapSize.width = 4096;
+  dirLight.shadow.mapSize.height = 4096;
+  dirLight.shadow.camera.near = 0.5;
+  dirLight.shadow.camera.far = 100;
+  dirLight.shadow.camera.left = -20;
+  dirLight.shadow.camera.right = 20;
+  dirLight.shadow.camera.top = 20;
+  dirLight.shadow.camera.bottom = -20;
+  dirLight.shadow.normalBias = 0.001;
+  dirLight.shadow.radius = 4;
+  scene.add(dirLight);
+
+  // Secondary fill light for subtle shadow gradients
+  const fillLight = new THREE.DirectionalLight(0x334466, 0.15);
+  fillLight.position.set(5, 1, 2);
+  scene.add(fillLight);
+  scene.add(new THREE.AxesHelper(5));
+  // Add eye chart to the scene
+  const textureLoader = new THREE.TextureLoader();
+  textureLoader.load('eyechart.png', (texture) => {
+    // Get the aspect ratio of the image
+    const aspectRatio = texture.image.width / texture.image.height;
+    
+    // Set the longer dimension to 0.5m
+    let width, height;
+    if (aspectRatio > 1) {
+      // Image is wider than tall
+      width = 0.5;
+      height = 0.5 / aspectRatio;
+    } else {
+      // Image is taller than wide (typical eye chart)
+      height = 0.5;
+      width = 0.5 * aspectRatio;
+    }
+    
+    // Create plane geometry with calculated dimensions
+    const eyeChartGeometry = new THREE.PlaneGeometry(width, height);
+    const eyeChartMaterial = new THREE.MeshStandardMaterial({ 
+      map: texture,
+      side: THREE.DoubleSide,
+      metalness: 0,
+      roughness: 1
+    });
+    const eyeChartMesh = new THREE.Mesh(eyeChartGeometry, eyeChartMaterial);
+    
+    // Position the eye chart
+    eyeChartMesh.position.set(0, 0, 15);
+    eyeChartMesh.receiveShadow = true;
+    
+    // Explicitly set rotation to face +z direction
+    eyeChartMesh.rotation.set(0, 0, 0);
+    
+    scene.add(eyeChartMesh);
+    console.log('Eye chart added to scene:', { width, height, position: eyeChartMesh.position });
+  });
+  let thrusters = [];
+  const keyToThrusterIndices = { w:[],s:[],a:[],d:[],q:[],e:[],i:[],k:[],j:[],l:[],u:[],o:[] };
+
+  window.thrusters = thrusters;
+  window.keyToThrusterIndices = keyToThrusterIndices;
+
+  function createThrusterVisual(pos, dir){
+    const group = new THREE.Group();
+    const cone = new THREE.ConeGeometry(0.15/5,0.4/5,8);
+    const mat = new THREE.MeshStandardMaterial({
+      color:0xff5500, emissive:0x000000, metalness:0.1, roughness:0.8
+    });
+    const mesh = new THREE.Mesh(cone, mat);
+    mesh.position.copy(pos);
+    const q = new THREE.Quaternion();
+    q.setFromUnitVectors(new THREE.Vector3(0,1,0), new THREE.Vector3(dir.x,dir.y,dir.z));
+    mesh.quaternion.copy(q);
+    mesh.rotateX(Math.PI);
+    group.add(mesh);
+    return {group, material:mat};
+  }
+  window.createThrusterVisual = createThrusterVisual;
+
+  const keys = {};               
+  let backtickPressed = false;
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'CapsLock') {
+      fineControlMode = !fineControlMode;
+      fineControlKeys = {};
+      fineControlProcessedKeys = {};
+      return;
+    }
+    
+    const k = e.key.toLowerCase();
+    if (k === '`') backtickPressed = true;
+    
+    if (fineControlMode && ['w','s','a','d','q','e','i','k','j','l','u','o'].includes(k)) {
+      e.preventDefault();
+      if (!fineControlProcessedKeys[k]) {
+        fineControlKeys[k] = true;
+        fineControlProcessedKeys[k] = true;
+        // Record the start time for timed firing
+        if (timedFiringEnabled && !fineControlKeyStartTimes[k]) {
+          fineControlKeyStartTimes[k] = performance.now();
+        }
+      }
+    } else {
+      keys[k] = true;
+    }
+
+    if (backtickPressed && k === 'r') resetSimulation();
+    if (backtickPressed && k === 'p') {
+      if (isDocked && paused) {
+        // Undocking: record the time when we start
+        isDocked = false;
+        hasLeftDockingBoxOnce = true;
+        canDock = false;
+        updateUIText('docking-status', 'NOT DOCKED');
+        // Record undock time when unpausing from docked state
+        undockTime = performance.now();
+        accumulatedPausedTime = 0; // Reset paused time when undocking
+      }
+      
+      if (paused) {
+        // Unpausing: accumulate the time we were paused
+        if (pausedStartTime !== null) {
+          accumulatedPausedTime += (performance.now() - pausedStartTime);
+          pausedStartTime = null;
+        }
+      } else {
+        // Pausing: record when we paused
+        pausedStartTime = performance.now();
+      }
+      
+      paused = !paused;
+    }
+    if (backtickPressed && k === 'f') {
+      if (isDocked && paused) {
+        // Undocking: record the time when we start
+        isDocked = false;
+        hasLeftDockingBoxOnce = true;
+        canDock = false;
+        updateUIText('docking-status', 'NOT DOCKED');
+        // Record undock time when unpausing from docked state
+        undockTime = performance.now();
+        accumulatedPausedTime = 0; // Reset paused time when undocking
+      }
+      
+      if (paused) {
+        // Unpausing: accumulate the time we were paused
+        if (pausedStartTime !== null) {
+          accumulatedPausedTime += (performance.now() - pausedStartTime);
+          pausedStartTime = null;
+        }
+      } else {
+        // Pausing: record when we paused
+        pausedStartTime = performance.now();
+      }
+      
+      paused = !paused;
+    }
+    if (backtickPressed && k === 'h') {
+      toggleHullVisibility();
+
+      // Check the status text to see if hulls are now visible
+      const hullStatus = document.getElementById('hull-status').textContent;
+      const showHulls = hullStatus === 'Hulls Visible';
+
+      // Manually toggle the docking port collision box to match the hulls
+      if (window.dockingPortCollisionMesh) {
+        window.dockingPortCollisionMesh.visible = showHulls;
+      }
+
+      toggleSpacecraftBoundingBoxVisibility(showHulls);
+    }
+    if (backtickPressed && k === 'x') {
+      showDistanceInfo = !showDistanceInfo;
+      toggleUIVisibility('distance-info', showDistanceInfo);
+    }
+    if (backtickPressed && k === 'b') {
+      toggleDockingBoxes();
+    }
+    if (backtickPressed && k === 'z') {
+      // Cycle which docking zone the HUD shows info for
+      if (dockingZones.length > 0) {
+        selectedDockingZoneIndex = (selectedDockingZoneIndex + 1) % dockingZones.length;
+        const zone = dockingZones[selectedDockingZoneIndex];
+        const label = zone.name === 'primary' ? 'Station' : 'Spacecraft 2';
+        updateUIText('docking-target-label', label);
+        console.log(`HUD docking info now showing: ${label} (zone ${selectedDockingZoneIndex + 1}/${dockingZones.length})`);
+      }
+    }
+    if (k === 'c') camSys.switchCameraMode();
+    if (k === ' ') stopEverything();
+    if (k === 't' && attitudeControl && attitudeControl.loaded) {
+      const newMode = attitudeControl.toggleMode();
+      updateUIText('control-mode', 
+        newMode === 'thrusters' ? 'Thrusters' : 
+        newMode === 'reactionwheels' ? 'Reaction Wheels' : 'CMGs');
+      toggleUIVisibility('reaction-wheel-status', newMode === 'reactionwheels');
+      toggleUIVisibility('cmg-status', newMode === 'cmgs');
+    }
+    if (k === 'v' && lampManager) {
+      if (backtickPressed) {
+        lampManager.toggleHelpers();
+      } else {
+        const lampsVisible = lampManager.toggleLamps();
+        updateUIText('lamp-status-text', lampsVisible ? 'ON' : 'OFF');
+      }
+    }
+    if (k === 'g' && attitudeControl && attitudeControl.loaded) {
+      attitudeControl.desaturateWithThrusters(thrusters, keyToThrusterIndices);
+    }
+  });
+
+  document.addEventListener('keyup', e => {
+    const k = e.key.toLowerCase();
+    if (k === '`') backtickPressed = false;
+    if (fineControlMode) {
+      delete fineControlProcessedKeys[k];
+    } else {
+      delete keys[k];
+    }
+  });
+
+  function stopEverything() {
+    if (!satBody) return;
+    satBody.velocity.set(0,0,0);
+    satBody.angularVelocity.set(0,0,0);
+    thrusters.forEach(t => {
+      if (t.active) {
+        t.active = false;
+        t.material.emissive.setHex(0x000000);
+      }
+    });
+  }
+  let paused = true; // Start paused so spacecraft stays docked
+
+  let specialThrusterModeEnabled = false;
+  let disabledThrusterIndex = -1;
+  let specialThrusterModeTriggered = false;
+
+  function checkSpecialThrusterModeDate() {
+    const activationDate = new Date('2031-03-08T00:00:00');
+    const currentDate = new Date();
+    return currentDate >= activationDate;
+  }
+
+  function resetSimulation(){
+    if (!satBody || !satMesh) return;
+    
+    satBody.position.copy(initialPosition);
+    satBody.velocity.set(0,0,0);
+    satBody.angularVelocity.set(0,0,0);
+    
+    satBody.quaternion.copy(initialOrientation);
+    satMesh.quaternion.copy(initialOrientation);
+    
+    resetFuel();
+    
+    if (attitudeControl) {
+      attitudeControl.mode = 'thrusters';
+      updateUIText('control-mode', 'Thrusters');
+      toggleUIVisibility('reaction-wheel-status', false);
+      toggleUIVisibility('cmg-status', false);
+      attitudeControl.reactionWheels.forEach(wheel => wheel.currentAngularMomentum = 0);
+      attitudeControl.cmgs.forEach(cmg => cmg.currentAngularMomentum.set(0, 0, 0));
+    }
+    
+    if (lampManager) {
+      lampManager.lampsVisible = true;
+      lampManager.lights.forEach(light => light.visible = true);
+      updateUIText('lamp-status-text', 'ON');
+      lampManager.helpersVisible = false;
+      lampManager.lampHelpers.forEach(helper => helper.visible = false);
+    }
+    
+    camSys.reset();
+    thrusters.forEach(t => {
+      t.active = false;
+      t.material.emissive.setHex(0x000000);
+    });
+    
+  
+    specialThrusterModeEnabled = checkSpecialThrusterModeDate();
+    disabledThrusterIndex = -1;
+    specialThrusterModeTriggered = false;
+    
+    // Reset clock when simulation is reset - reset to docked state
+    isDocked = true;
+    paused = true;
+    canDock = false;
+    hasLeftDockingBoxOnce = false;
+    undockTime = null;
+    pausedStartTime = null;
+    accumulatedPausedTime = 0;
+    updateUIText('docking-status', 'DOCKED');
+    if (clockDisplay) {
+      clockDisplay.textContent = '0:00:00.000';
+    }
+  }
+
+  // Multi-zone docking logic.
+  // Checks every registered docking zone and returns the closest qualifying
+  // status. Keeps the same return-object shape as the original for HUD
+  // compatibility, plus a `zoneName` identifying which zone matched.
+  function isInDockingZone() {
+    if (!satBody) return { inBox: false };
+
+    const currentOrientationThree = new THREE.Quaternion(
+      satBody.quaternion.x, satBody.quaternion.y, satBody.quaternion.z, satBody.quaternion.w
+    );
+
+    const speed = satBody.velocity.length();
+    const xzSpeed = Math.sqrt(satBody.velocity.x ** 2 + satBody.velocity.z ** 2);
+    const zSpeed = satBody.velocity.z;
+    const withinSpeedLimits = xzSpeed <= MAX_XZ_SPEED && zSpeed <= MAX_Z_SPEED;
+
+    const angularSpeed = satBody.angularVelocity.length() * (180 / Math.PI);
+    const withinAngularSpeedLimit = angularSpeed <= MAX_ANGULAR_SPEED;
+
+    // If no zones registered (shouldn't happen), fall back to primary defaults
+    if (dockingZones.length === 0) {
+      const positionDiff = {
+        x: satBody.position.x - initialPosition.x,
+        y: satBody.position.y - initialPosition.y,
+        z: satBody.position.z - initialPosition.z
+      };
+      const distance = Math.sqrt(positionDiff.x ** 2 + positionDiff.y ** 2 + positionDiff.z ** 2);
+      const inBox = Math.abs(positionDiff.x) <= DOCKING_BOX_SIZE &&
+                    Math.abs(positionDiff.y) <= DOCKING_BOX_SIZE &&
+                    Math.abs(positionDiff.z) <= DOCKING_BOX_SIZE;
+      const angleDiff = currentOrientationThree.angleTo(initialOrientationThree) * (180 / Math.PI);
+      return {
+        inBox,
+        inAngle: angleDiff <= DOCKING_ANGLE_THRESHOLD,
+        withinSpeedLimits,
+        withinAngularSpeedLimit,
+        angleDiff,
+        distance,
+        speed,
+        angularSpeed,
+        zoneName: 'primary'
+      };
+    }
+
+    // Evaluate every zone and pick the closest one
+    let best = null;
+    for (const zone of dockingZones) {
+      const dx = satBody.position.x - zone.position.x;
+      const dy = satBody.position.y - zone.position.y;
+      const dz = satBody.position.z - zone.position.z;
+      const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+
+      const inBox = Math.abs(dx) <= zone.dockingBoxSize &&
+                    Math.abs(dy) <= zone.dockingBoxSize &&
+                    Math.abs(dz) <= zone.dockingBoxSize;
+
+      const angleDiff = currentOrientationThree.angleTo(zone.orientation) * (180 / Math.PI);
+      const inAngle = angleDiff <= zone.dockingAngleThreshold;
+
+      // A zone is a candidate if we're within its box OR it's the closest seen
+      const candidate = {
+        inBox,
+        inAngle,
+        withinSpeedLimits,
+        withinAngularSpeedLimit,
+        angleDiff,
+        distance,
+        speed,
+        angularSpeed,
+        zoneName: zone.name
+      };
+
+      if (best === null || distance < best.distance) {
+        best = candidate;
+      }
+    }
+
+    return best;
+  }
+
+  // Compute docking status relative to a SPECIFIC zone (for HUD display).
+  // Unlike isInDockingZone() which returns the closest, this lets the user
+  // select which target they want to monitor.
+  function getSelectedDockingZoneStatus() {
+    if (!satBody || dockingZones.length === 0) return null;
+    const zone = dockingZones[selectedDockingZoneIndex % dockingZones.length];
+
+    const currentOrientationThree = new THREE.Quaternion(
+      satBody.quaternion.x, satBody.quaternion.y, satBody.quaternion.z, satBody.quaternion.w
+    );
+
+    const dx = satBody.position.x - zone.position.x;
+    const dy = satBody.position.y - zone.position.y;
+    const dz = satBody.position.z - zone.position.z;
+    const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+    const inBox = Math.abs(dx) <= zone.dockingBoxSize &&
+                  Math.abs(dy) <= zone.dockingBoxSize &&
+                  Math.abs(dz) <= zone.dockingBoxSize;
+    const angleDiff = currentOrientationThree.angleTo(zone.orientation) * (180 / Math.PI);
+
+    const speed = satBody.velocity.length();
+    const xzSpeed = Math.sqrt(satBody.velocity.x ** 2 + satBody.velocity.z ** 2);
+    const zSpeed = satBody.velocity.z;
+    const withinSpeedLimits = xzSpeed <= MAX_XZ_SPEED && zSpeed <= MAX_Z_SPEED;
+    const angularSpeed = satBody.angularVelocity.length() * (180 / Math.PI);
+    const withinAngularSpeedLimit = angularSpeed <= MAX_ANGULAR_SPEED;
+
+    const label = zone.name === 'primary' ? 'Station' : 'Spacecraft 2';
+
+    return {
+      inBox,
+      inAngle: angleDiff <= zone.dockingAngleThreshold,
+      withinSpeedLimits,
+      withinAngularSpeedLimit,
+      angleDiff,
+      distance,
+      speed,
+      angularSpeed,
+      zoneName: zone.name,
+      label
+    };
+  }
+
+  // Function to update the clock display
+  function updateClock() {
+    if (!clockDisplay) {
+      clockDisplay = document.getElementById('clock-display');
+      if (!clockDisplay) return;
+    }
+    
+    // If never undocked, show 0:00:00.000
+    if (undockTime === null) {
+      clockDisplay.textContent = '0:00:00.000';
+      return;
+    }
+    
+    // If docked, show the time at which we docked (paused)
+    if (isDocked) {
+      const elapsedSeconds = lastDockedTime / 1000;
+      const hours = Math.floor(elapsedSeconds / 3600);
+      const minutes = Math.floor((elapsedSeconds % 3600) / 60);
+      const seconds = Math.floor(elapsedSeconds % 60);
+      const milliseconds = Math.floor(lastDockedTime % 1000);
+      const hoursStr = hours.toString();
+      const minutesStr = minutes.toString().padStart(2, '0');
+      const secondsStr = seconds.toString().padStart(2, '0');
+      const millisecondsStr = milliseconds.toString().padStart(3, '0');
+      clockDisplay.textContent = `${hoursStr}:${minutesStr}:${secondsStr}.${millisecondsStr}`;
+      return;
+    }
+    
+    // Calculate elapsed time since undock, accounting for paused time
+    let currentTime = performance.now();
+    
+    // If currently paused, subtract the current pause duration from the calculation
+    if (paused && pausedStartTime !== null) {
+      currentTime = pausedStartTime;
+    }
+    
+    const elapsedMilliseconds = currentTime - undockTime - accumulatedPausedTime;
+    const elapsedSeconds = elapsedMilliseconds / 1000;
+    
+    // Calculate hours, minutes, seconds, and milliseconds
+    const hours = Math.floor(elapsedSeconds / 3600);
+    const minutes = Math.floor((elapsedSeconds % 3600) / 60);
+    const seconds = Math.floor(elapsedSeconds % 60);
+    const milliseconds = Math.floor(elapsedMilliseconds % 1000);
+    
+    // Format as H:MM:SS.mmm
+    const hoursStr = hours.toString();
+    const minutesStr = minutes.toString().padStart(2, '0');
+    const secondsStr = seconds.toString().padStart(2, '0');
+    const millisecondsStr = milliseconds.toString().padStart(3, '0');
+    
+    clockDisplay.textContent = `${hoursStr}:${minutesStr}:${secondsStr}.${millisecondsStr}`;
+  }
+
+  async function main(config) {
+    initializeUI();
+    
+    // Set up event listeners for timed firing controls and torque slider
+    const timedFiringToggle = document.getElementById('timed-firing-toggle');
+    const firingDurationSlider = document.getElementById('firing-duration-slider');
+    const firingDurationValue = document.getElementById('firing-duration-value');
+    const torqueSlider = document.getElementById('torque-slider');
+    const torqueValue = document.getElementById('torque-value');
+    
+    if (timedFiringToggle) {
+      timedFiringToggle.addEventListener('change', (e) => {
+        timedFiringEnabled = e.target.checked;
+        // Clear key start times when toggling
+        fineControlKeyStartTimes = {};
+      });
+    }
+    
+    if (firingDurationSlider && firingDurationValue) {
+      // Function to convert slider value (0-100) to actual duration (0-15 seconds)
+      // 80% of slider (0-80) maps to 0-2 seconds
+      // 20% of slider (80-100) maps to 2-15 seconds
+      function sliderToDuration(sliderValue) {
+        const value = parseFloat(sliderValue);
+        if (value <= 80) {
+          // 0-2 seconds range with fine control
+          return (value / 80) * 2;
+        } else {
+          // 2-15 seconds range
+          return 2 + ((value - 80) / 20) * 13;
+        }
+      }
+      
+      // Function to convert duration (0-15 seconds) back to slider value (0-100)
+      function durationToSlider(duration) {
+        if (duration <= 2) {
+          // Map 0-2 seconds back to 0-80
+          return (duration / 2) * 80;
+        } else {
+          // Map 2-15 seconds back to 80-100
+          return 80 + ((duration - 2) / 13) * 20;
+        }
+      }
+      
+      // Function to snap duration to appropriate increment based on range
+      function snapDuration(duration) {
+        if (duration <= 2) {
+          // Snap to 0.01 increments for small scale
+          return Math.round(duration * 100) / 100;
+        } else {
+          // Snap to 0.1 increments for large scale
+          return Math.round(duration * 10) / 10;
+        }
+      }
+      
+      // Set initial slider value to correspond to 1 second
+      const initialSliderValue = durationToSlider(1.0);
+      firingDurationSlider.value = initialSliderValue;
+      firingDuration = 1.0;
+      firingDurationValue.textContent = firingDuration.toFixed(2);
+      
+      firingDurationSlider.addEventListener('input', (e) => {
+        let duration = sliderToDuration(e.target.value);
+        // Snap to appropriate increment
+        duration = snapDuration(duration);
+        // Update slider position to reflect snapped value
+        firingDurationSlider.value = durationToSlider(duration);
+        firingDuration = duration;
+        firingDurationValue.textContent = duration.toFixed(2);
+      });
+    }
+    
+    // Torque slider event listener
+    if (torqueSlider && torqueValue) {
+      torqueSlider.addEventListener('input', (e) => {
+        torquePercentage = parseInt(e.target.value);
+        torqueValue.textContent = torquePercentage;
+      });
+    }
+    
+      try {
+      // Get centerOfMass offset from spacecraft body
+      const centerOfMassOffset = satBody.centerOfMassOffset || {x: 0, y: 0, z: 0};
+      
+      // Initialize all systems with the combined configuration
+      thrusters = await initializeThrustersWithConfig(config.thrusters, CANNON, satMesh, keyToThrusterIndices, createThrusterVisual, centerOfMassOffset);
+      
+      // Load hulls from the JSON file
+      loadConvexHulls(CONVEX_HULLS_PATH, scene, world);
+      
+      // Load attitude control configuration
+      await attitudeControl.initializeWithConfigs(config.reactionwheels, config.cmg);
+      
+      // Load lamps configuration
+      await lampManager.loadLampsWithConfig(config.lamps);
+      
+      // Load camera configuration
+      camSys.loadCamerasWithConfig(config.cameras);
+      
+      // NEW: Add the docking port collision mesh to the hull system
+      if (window.dockingPortBody && window.dockingPortCollisionMesh) {
+        addExternalHull(window.dockingPortBody, window.dockingPortCollisionMesh);
+      }
+      
+      if (attitudeControl.loaded) console.log('Attitude control system loaded');
+      else console.log('No attitude control systems loaded, using thrusters only');
+      
+      console.log('Simulation initialized successfully');
+      document.getElementById('hull-status').textContent = 'Spacecraft Loaded';
+    } catch (error) {
+      console.error('Error during initialization:', error);
+      document.getElementById('hull-status').textContent = `Error: ${error.message}`;
+    }
+    
+    animate();
+  }
+
+  const clock = new THREE.Clock();
+  
+  // FPS limiting variables
+  const TARGET_FPS = 60;
+  const FRAME_DURATION = 1000 / TARGET_FPS;
+  let lastFrameTime = performance.now();
+  
+  function animate(){
+    requestAnimationFrame(animate);
+    
+    // FPS limiting - only update at target FPS
+    const currentTime = performance.now();
+    const elapsed = currentTime - lastFrameTime;
+    
+    if (elapsed < FRAME_DURATION) {
+      return; // Skip this frame if not enough time has passed
+    }
+    
+    // Update last frame time, accounting for any excess to maintain steady frame rate
+    lastFrameTime = currentTime - (elapsed % FRAME_DURATION);
+    
+    const dt = clock.getDelta();
+    
+    // Handle timed firing: check if any keys have exceeded their firing duration
+    if (fineControlMode && timedFiringEnabled) {
+      Object.entries(fineControlKeyStartTimes).forEach(([key, startTime]) => {
+        const elapsed = (currentTime - startTime) / 1000; // Convert to seconds
+        if (elapsed >= firingDuration) {
+          // Remove from fineControlKeys to stop firing
+          delete fineControlKeys[key];
+          delete fineControlKeyStartTimes[key];
+        }
+      });
+    }
+    
+    // DEBUG: Print inertia matrix every 10 seconds
+    if (satBody && currentTime - lastInertiaDebugTime > INERTIA_DEBUG_INTERVAL) {
+      console.log("DEBUG: Inertia Matrix (10s interval):", {
+        x: satBody.inertia.x,
+        y: satBody.inertia.y,
+        z: satBody.inertia.z,
+        mass: satBody.mass
+      });
+      lastInertiaDebugTime = currentTime;
+    }
+    
+    if (!specialThrusterModeEnabled && checkSpecialThrusterModeDate()) {
+      specialThrusterModeEnabled = true;
+    }
+    //specialThrusterModeEnabled = true;
+    
+    // Check if spacecraft z position is < 2 and trigger special thruster mode
+    if (specialThrusterModeEnabled && !specialThrusterModeTriggered && satBody && satBody.position.z < 2) {
+      // Find thrusters facing -z direction using dot product
+      const negativeZDirection = new CANNON.Vec3(0, 0, -1);
+      const thrustersFacingNegativeZ = [];
+      
+      thrusters.forEach((thruster, index) => {
+        const dotProduct = thruster.dir.dot(negativeZDirection);
+        if (dotProduct > 0) {
+          thrustersFacingNegativeZ.push({ index, thruster, dotProduct });
+        }
+      });
+      
+      // Randomly select one of the thrusters facing -z
+      if (thrustersFacingNegativeZ.length > .707) {
+        const randomIndex = Math.floor(Math.random() * thrustersFacingNegativeZ.length);
+        disabledThrusterIndex = thrustersFacingNegativeZ[randomIndex].index;
+        specialThrusterModeTriggered = true;
+      }
+    }
+    
+    if (!paused && satBody){
+      if (attitudeControl && attitudeControl.loaded && attitudeControl.mode !== 'thrusters') {
+        const torque = new CANNON.Vec3(0, 0, 0);
+        const isCMGMode = attitudeControl.mode === 'cmgs';
+        
+        // Get max torque from the active attitude control system
+        let maxTorque = 0.5; // Default fallback
+        if (isCMGMode && attitudeControl.cmgs.length > 0) {
+          // Use average max torque from all CMGs
+          maxTorque = attitudeControl.cmgs.reduce((sum, cmg) => sum + cmg.maxTorque, 0) / attitudeControl.cmgs.length;
+        } else if (!isCMGMode && attitudeControl.reactionWheels.length > 0) {
+          // Use average max torque from all reaction wheels
+          maxTorque = attitudeControl.reactionWheels.reduce((sum, wheel) => sum + wheel.maxTorque, 0) / attitudeControl.reactionWheels.length;
+        }
+        
+        // Calculate torque per axis based on percentage
+        const torquePerAxis = maxTorque * (torquePercentage / 100);
+        
+        if (fineControlMode) {
+          // Swap I and K for CMGs
+          if (isCMGMode ? fineControlKeys['k'] : fineControlKeys['i']) torque.x += torquePerAxis;
+          if (isCMGMode ? fineControlKeys['i'] : fineControlKeys['k']) torque.x -= torquePerAxis;
+          // Swap J and L for CMGs
+          if (isCMGMode ? fineControlKeys['j'] : fineControlKeys['l']) torque.y += torquePerAxis;
+          if (isCMGMode ? fineControlKeys['l'] : fineControlKeys['j']) torque.y -= torquePerAxis;
+          // Swap U and O for CMGs
+          if (isCMGMode ? fineControlKeys['o'] : fineControlKeys['u']) torque.z += torquePerAxis;
+          if (isCMGMode ? fineControlKeys['u'] : fineControlKeys['o']) torque.z -= torquePerAxis;
+        } else {
+          // Swap I and K for CMGs
+          if (isCMGMode ? keys['k'] : keys['i']) torque.x += torquePerAxis;
+          if (isCMGMode ? keys['i'] : keys['k']) torque.x -= torquePerAxis;
+          // Swap J and L for CMGs
+          if (isCMGMode ? keys['j'] : keys['l']) torque.y += torquePerAxis;
+          if (isCMGMode ? keys['l'] : keys['j']) torque.y -= torquePerAxis;
+          // Swap U and O for CMGs
+          if (isCMGMode ? keys['o'] : keys['u']) torque.z += torquePerAxis;
+          if (isCMGMode ? keys['u'] : keys['o']) torque.z -= torquePerAxis;
+        }
+        if (torque.length() > 0) attitudeControl.applyControlTorque(torque);
+        if (attitudeControl.desaturationActive) attitudeControl.desaturateWithThrusters(thrusters, keyToThrusterIndices);
+      } else {
+        Object.entries(keyToThrusterIndices).forEach(([key, indices]) => {
+          const keyIsPressed = fineControlMode ? fineControlKeys[key] : keys[key];
+          if (keyIsPressed && indices.length && !['w','s','a','d','q','e'].includes(key)) {
+            indices.forEach(i => {
+              const t = thrusters[i]; if (!t) return;
+              // Skip if thruster is disabled by special thruster mode
+              if (specialThrusterModeTriggered && i === disabledThrusterIndex) return;
+              const fuelStatus = getFuelStatus();
+              if (fuelStatus.fuelMass <= 0) { if (t.active) { t.active = false; t.material.emissive.setHex(0x000000); } return; }
+              if (!t.thrust || !t.isp || t.isp <= 0 || isNaN(t.thrust) || isNaN(t.isp)) { console.error("Thruster has invalid properties, skipping.", t); if (t.active) { t.active = false; t.material.emissive.setHex(0x000000); } return; }
+              const forceLocal = t.dir.scale(t.thrust);
+              satBody.applyLocalForce(forceLocal, t.pos);
+              const fuelConsumptionRate = t.thrust / (t.isp * 9.81);
+              const fuelConsumed = fuelConsumptionRate * dt;
+              const remainingFuel = consumeFuel(fuelConsumed);
+              if (remainingFuel <= 0) { if (t.active) { t.active = false; t.material.emissive.setHex(0x000000); } return; }
+
+              // FIX: Visually activate the thruster
+              if (!t.active) {
+                t.active = true;
+                t.material.emissive.setHex(0xff5500);
+              }
+            });
+          }
+        });
+      }
+      
+      Object.entries(keyToThrusterIndices).forEach(([key, indices]) => {
+        const keyIsPressed = fineControlMode ? fineControlKeys[key] : keys[key];
+        if (keyIsPressed && indices.length && ['w','s','a','d','q','e'].includes(key)) {
+          indices.forEach(i => {
+            const t = thrusters[i]; if (!t) return;
+            // Skip if thruster is disabled by special thruster mode
+            if (specialThrusterModeTriggered && i === disabledThrusterIndex) return;
+            const fuelStatus = getFuelStatus();
+            if (fuelStatus.fuelMass <= 0) { if (t.active) { t.active = false; t.material.emissive.setHex(0x000000); } return; }
+            if (!t.thrust || !t.isp || t.isp <= 0 || isNaN(t.thrust) || isNaN(t.isp)) { console.error("Thruster has invalid properties, skipping.", t); if (t.active) { t.active = false; t.material.emissive.setHex(0x000000); } return; }
+            const forceLocal = t.dir.scale(t.thrust);
+            satBody.applyLocalForce(forceLocal, t.pos);
+            const fuelConsumptionRate = t.thrust / (t.isp * 9.81);
+            const fuelConsumed = fuelConsumptionRate * dt;
+            const remainingFuel = consumeFuel(fuelConsumed);
+            if (remainingFuel <= 0) { if (t.active) { t.active = false; t.material.emissive.setHex(0x000000); } return; }
+
+            // FIX: Visually activate the thruster
+            if (!t.active) {
+              t.active = true;
+              t.material.emissive.setHex(0xff5500);
+            }
+          });
+        }
+      });
+      
+      world.step(1/60);
+    }
+
+    if (getSpacecraftBody()) {
+      updateSpacecraft();
+    }
+
+    camSys.update();
+
+    if (lampManager) {
+      lampManager.updateLamps();
+    }
+
+    thrusters.forEach(t => {
+      const stillPressed = Object.entries(keyToThrusterIndices).some(([k,ids])=> {
+        const keyIsPressed = fineControlMode ? fineControlKeys[k] : keys[k];
+        return keyIsPressed && ids.includes(t.index);
+      });
+      if (t.active && !stillPressed){
+        t.active = false;
+        t.material.emissive.setHex(0x000000);
+      }
+    });
+
+    // Only clear fineControlKeys if timed firing is NOT enabled
+    // When timed firing is enabled, keys are cleared by the duration check logic
+    if (!timedFiringEnabled) {
+      fineControlKeys = {};
+    }
+
+    // Docking logic — checks ALL zones to determine actual dock state
+    const dockingStatus = isInDockingZone();
+    if (!dockingStatus.inBox) hasLeftDockingBoxOnce = true;
+
+    // HUD display — shows info for the SELECTED zone (cycled with ` + z).
+    // This is separate from the actual docking logic above.
+    const hudStatus = getSelectedDockingZoneStatus();
+    if (hudStatus) {
+      updateUIText('dock-distance', hudStatus.distance.toFixed(3));
+      updateUIText('angular-diff', hudStatus.angleDiff.toFixed(2));
+      updateUIText('docking-speed', hudStatus.speed.toFixed(3));
+      updateUIText('docking-angular-speed', hudStatus.angularSpeed.toFixed(3));
+      updateUIText('docking-target-label', hudStatus.label);
+    } else {
+      updateUIText('dock-distance', dockingStatus.distance.toFixed(3));
+      updateUIText('angular-diff', dockingStatus.angleDiff.toFixed(2));
+      updateUIText('docking-speed', dockingStatus.speed.toFixed(3));
+      updateUIText('docking-angular-speed', dockingStatus.angularSpeed.toFixed(3));
+    }
+    
+    if (!isDocked && canDock && hasLeftDockingBoxOnce && dockingStatus.inBox && dockingStatus.inAngle && dockingStatus.withinSpeedLimits && dockingStatus.withinAngularSpeedLimit) {
+      isDocked = true; paused = true;
+      updateUIText('docking-status', 'DOCKED');
+      satBody.velocity.set(0, 0, 0);
+      satBody.angularVelocity.set(0, 0, 0);
+      // Record the time elapsed when we dock
+      let currentTime = performance.now();
+      if (pausedStartTime !== null) {
+        currentTime = pausedStartTime;
+      }
+      lastDockedTime = currentTime - undockTime - accumulatedPausedTime;
+    }
+    if (!canDock && !dockingStatus.inBox && hasLeftDockingBoxOnce) {
+      canDock = true;
+    }
+
+    const fuelStatus = getFuelStatus();
+      updateUI({
+      satBody,
+      hudElement: document.getElementById('status-panel'),
+      isPaused: paused,
+      fuelMass: fuelStatus.fuelMass,
+      maxFuelMass: fuelStatus.maxFuelMass,
+      dryMass: fuelStatus.dryMass,
+      attitudeControl,
+      lampManager,
+      station,
+      satMesh,
+      raycaster,
+      maxDistance,
+      showDistanceInfo,
+      cameraSystem: camSys,
+      fineControlMode,
+      isDocked,
+      dockingStatus: hudStatus || dockingStatus
+    });
+    
+    // Update clock display
+    updateClock();
+    
+    renderer.render(scene, camSys.getCamera());
+  }
+
+  window.addEventListener('resize', ()=>{
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    camSys.handleResize();
+  });
+
+  // Export current position and orientation to JSON file.
+  // Format is UNCHANGED from the original so the exported file can be re-used
+  // as the "Initial Position" file for either spacecraft. To position the
+  // second spacecraft, fly SC1 to the desired spot, export, then upload that
+  // file as the second spacecraft's position file.
+  window.addEventListener('exportPosition', () => {
+    if (!satBody) {
+      console.error('Spacecraft body not available for export');
+      alert('Spacecraft not loaded yet');
+      return;
+    }
+
+    const positionData = {
+      position: {
+        x: satBody.position.x,
+        y: satBody.position.y,
+        z: satBody.position.z
+      },
+      orientation: {
+        x: satBody.quaternion.x,
+        y: satBody.quaternion.y,
+        z: satBody.quaternion.z,
+        w: satBody.quaternion.w
+      },
+      dockingBoxSize: DOCKING_BOX_SIZE,
+      dockingAngleThreshold: DOCKING_ANGLE_THRESHOLD
+    };
+
+    // Create a blob and download the file
+    const dataStr = JSON.stringify(positionData, null, 2);
+    const blob = new Blob([dataStr], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'spacecraft_position.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    console.log('Exported position/orientation:', positionData);
+  });
+
+  initializeDefaultSpacecraft();
+}
