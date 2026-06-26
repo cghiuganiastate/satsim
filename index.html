@@ -289,6 +289,21 @@
         </div>
       </div>
       
+      <div class="file-upload-section">
+        <div class="section-title">Graphics Options</div>
+        <div class="file-upload-grid">
+          <div class="file-upload-item">
+            <label for="ssao-enabled" style="display: flex; align-items: center; cursor: pointer;">
+              <input type="checkbox" id="ssao-enabled" checked style="margin-right: 8px;">
+              Enable SSAO (Screen Space Ambient Occlusion)
+            </label>
+            <div class="file-status" style="margin-top: 5px; color: #aaa; font-size: 11px;">
+              SSAO adds realistic shading but can impact performance on older hardware
+            </div>
+          </div>
+        </div>
+      </div>
+      
       <div class="menu-buttons">
         <button id="use-defaults-button" class="menu-button">Use Defaults</button>
         <button id="start-simulation-button" class="menu-button start-button">Start Simulation</button>
@@ -753,6 +768,12 @@
       
       // Make uploadedFiles available globally for the simulation
       window.uploadedFiles = uploadedFiles;
+      
+      // Get graphics settings
+      const ssaoEnabled = document.getElementById('ssao-enabled').checked;
+      window.graphicsSettings = {
+        ssaoEnabled: ssaoEnabled
+      };
       
       // Dispatch a custom event to signal that simulation should start
       window.dispatchEvent(new CustomEvent('startSimulation'));

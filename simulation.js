@@ -710,15 +710,24 @@ function initSimulation() {
     // Set up ambient occlusion (SSAO) post-processing following the official
     // three.js pattern: RenderPass (scene->buffer) -> SSAOPass (occlusion) ->
     // OutputPass (final sRGB conversion). All three are required.
-    composer = new EffectComposer(renderer);
-    composer.addPass(new RenderPass(scene, camSys.getCamera()));
-    const ssaoPass = new SSAOPass(scene, camSys.getCamera(), window.innerWidth, window.innerHeight);
-    // Tuned for the spacecraft's metric scale (model is a few meters across).
-    ssaoPass.kernelRadius = 0.5;
-    ssaoPass.minDistance = 0.001;
-    ssaoPass.maxDistance = 0.05;
-    composer.addPass(ssaoPass);
-    composer.addPass(new OutputPass());
+    // Only initialize if SSAO is enabled in graphics settings.
+    const ssaoEnabled = window.graphicsSettings && window.graphicsSettings.ssaoEnabled !== false;
+    
+    if (ssaoEnabled) {
+      composer = new EffectComposer(renderer);
+      composer.addPass(new RenderPass(scene, camSys.getCamera()));
+      const ssaoPass = new SSAOPass(scene, camSys.getCamera(), window.innerWidth, window.innerHeight);
+      // Tuned for the spacecraft's metric scale (model is a few meters across).
+      ssaoPass.kernelRadius = 0.5;
+      ssaoPass.minDistance = 0.001;
+      ssaoPass.maxDistance = 0.05;
+      composer.addPass(ssaoPass);
+      composer.addPass(new OutputPass());
+      console.log('SSAO enabled');
+    } else {
+      composer = null;
+      console.log('SSAO disabled for better performance');
+    }
 
     animate();
   }
