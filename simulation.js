@@ -34,7 +34,9 @@ import { SoundManager } from './soundManager.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { SSAOPass } from 'three/addons/postprocessing/SSAOPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { FXAAShader } from 'three/addons/shaders/FXAAShader.js';
 
 // Wait for the startSimulation event before initializing
 window.addEventListener('startSimulation', () => {
@@ -78,7 +80,8 @@ function initSimulation() {
   let dockingManager;
   let missionClock;
   let soundManager;
-  let composer; // EffectComposer used for SSAO ambient occlusion
+  let composer; // EffectComposer for post-processing (SSAO + FXAA)
+  let fxaaPass; // FXAA anti-aliasing pass (needs resolution uniform updates on resize)
   let defaultProperties = null;
   
   let showDistanceInfo = false;
@@ -712,21 +715,34 @@ function initSimulation() {
     // Only initialize if SSAO is enabled in graphics settings.
     const ssaoEnabled = window.graphicsSettings && window.graphicsSettings.ssaoEnabled !== false;
     
+    // The EffectComposer always runs so FXAA anti-aliasing can be applied.
+    // Note: the composer renders into non-multisampled render targets, so the
+    // renderer's MSAA flag has no effect on this path; FXAA replaces it.
+    composer = new EffectComposer(renderer);
+    composer.addPass(new RenderPass(scene, camSys.getCamera()));
+
     if (ssaoEnabled) {
-      composer = new EffectComposer(renderer);
-      composer.addPass(new RenderPass(scene, camSys.getCamera()));
       const ssaoPass = new SSAOPass(scene, camSys.getCamera(), window.innerWidth, window.innerHeight);
       // Tuned for the spacecraft's metric scale (model is a few meters across).
       ssaoPass.kernelRadius = 0.5;
       ssaoPass.minDistance = 0.001;
       ssaoPass.maxDistance = 0.05;
       composer.addPass(ssaoPass);
-      composer.addPass(new OutputPass());
       console.log('SSAO enabled');
     } else {
-      composer = null;
       console.log('SSAO disabled for better performance');
     }
+
+    // OutputPass converts linear lighting -> sRGB display space. FXAA runs last
+    // so it operates on the final display-referred image.
+    composer.addPass(new OutputPass());
+
+    fxaaPass = new ShaderPass(FXAAShader);
+    const pixelRatio = renderer.getPixelRatio();
+    fxaaPass.material.uniforms['resolution'].value.x = 1 / (window.innerWidth * pixelRatio);
+    fxaaPass.material.uniforms['resolution'].value.y = 1 / (window.innerHeight * pixelRatio);
+    composer.addPass(fxaaPass);
+    console.log('FXAA enabled');
 
     animate();
   }
@@ -1011,6 +1027,11 @@ function initSimulation() {
   window.addEventListener('resize', ()=>{
     renderer.setSize(window.innerWidth, window.innerHeight);
     if (composer) composer.setSize(window.innerWidth, window.innerHeight);
+    if (fxaaPass) {
+      const pixelRatio = renderer.getPixelRatio();
+      fxaaPass.material.uniforms['resolution'].value.x = 1 / (window.innerWidth * pixelRatio);
+      fxaaPass.material.uniforms['resolution'].value.y = 1 / (window.innerHeight * pixelRatio);
+    }
     camSys.handleResize();
   });
 
