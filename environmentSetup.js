@@ -39,12 +39,14 @@ export function setupLighting(scene) {
   // Reduced ambient light intensity to make shadows appear darker in shadowed areas
   scene.add(new THREE.AmbientLight(0x111111));
 
-  // Enhanced directional light with high-quality shadow casting
+  // Enhanced directional light with high-quality shadow casting.
+  // Shadow map reduced from 4096² to 2048² — a 4× drop in shadow-fill work
+  // with negligible visual difference for this scene's scale.
   const dirLight = new THREE.DirectionalLight(0xffffff, 2.5);
   dirLight.position.set(-10, -2, -1);
   dirLight.castShadow = true;
-  dirLight.shadow.mapSize.width = 4096;
-  dirLight.shadow.mapSize.height = 4096;
+  dirLight.shadow.mapSize.width = 2048;
+  dirLight.shadow.mapSize.height = 2048;
   dirLight.shadow.camera.near = 0.5;
   dirLight.shadow.camera.far = 100;
   dirLight.shadow.camera.left = -20;

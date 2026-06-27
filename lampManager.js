@@ -90,8 +90,10 @@ export class LampManager {
 
     if (config.castShadow) {
       light.castShadow = true;
-      light.shadow.mapSize.width = 1024;
-      light.shadow.mapSize.height = 1024;
+      // Shadow map reduced from 1024² to 512² — adequate for small spotlights,
+      // and each shadow-casting spotlight adds a full render pass per frame.
+      light.shadow.mapSize.width = 512;
+      light.shadow.mapSize.height = 512;
       light.shadow.camera.near = 0.5;
       light.shadow.camera.far = config.distance || 20;
     }
@@ -169,7 +171,12 @@ export class LampManager {
       light.target.position.copy(light.position).add(this._tempDir.multiplyScalar(targetDistance));
 
       // --- 4. Update Helper ---
-      helper.update();
+      // Only update the debug helper when it's actually visible. Updating a
+      // SpotLightHelper is a comparatively expensive operation per lamp, and
+      // it's pointless when the helpers are hidden.
+      if (this.helpersVisible && helper) {
+        helper.update();
+      }
     });
   }
 

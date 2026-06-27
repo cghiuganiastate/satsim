@@ -318,6 +318,11 @@ function updateDockingInfo(isDocked, dockingStatus) {
   uiElements.dockingAngularSpeed.textContent = dockingStatus.angularSpeed.toFixed(3);
 }
 
+// Cached raycast targets — the station mesh tree is static once loaded, so we
+// only rebuild this list when the station reference changes.
+let _cachedStation = null;
+let _cachedIntersectableObjects = [];
+
 /**
  * Calculates distances to walls and updates the display.
  * @param {THREE.Object3D} station - The station model
@@ -336,17 +341,19 @@ function calculateDistancesToWalls(station, satMesh, raycaster, maxDistance) {
   const satRotation = new THREE.Quaternion();
   satMesh.getWorldQuaternion(satRotation);
   
-  // Create an array to store all intersectable objects
-  const intersectableObjects = [];
-  
-  // Add station and its children to intersectable objects
-  if (station) {
+  // Rebuild the intersectable-objects list only when the station reference
+  // changes (e.g. after the GLB finishes loading). Traversing the full station
+  // tree every frame just to rebuild the same array is wasteful.
+  if (station !== _cachedStation) {
+    _cachedStation = station;
+    _cachedIntersectableObjects = [];
     station.traverse((child) => {
       if (child.isMesh) {
-        intersectableObjects.push(child);
+        _cachedIntersectableObjects.push(child);
       }
     });
   }
+  const intersectableObjects = _cachedIntersectableObjects;
   
   // Check distances along each axis (positive and negative)
   const axes = [

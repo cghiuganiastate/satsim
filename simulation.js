@@ -53,16 +53,19 @@ function initSimulation() {
   ]);
   scene.background = skybox;
 
-  const renderer = new THREE.WebGLRenderer({ antialias: true, shadowMap: true });
+  const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap; // Soft, smoother shadows
   renderer.outputColorSpace = THREE.SRGBColorSpace; // Better color output
+  // Cap pixel ratio at 2× — on 3× Retina displays the default renders 9× as
+  // many fragments for minimal visual benefit.
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.setSize(window.innerWidth, window.innerHeight);
   document.getElementById('simulation-container').appendChild(renderer.domElement);
 
   const world = new CANNON.World();
   world.gravity.set(0, 0, 0);
-  world.broadphase = new CANNON.NaiveBroadphase();
+  world.broadphase = new CANNON.SAPBroadphase(world);
   world.solver.iterations = 10;
 
   let satBody;
@@ -77,10 +80,6 @@ function initSimulation() {
   let soundManager;
   let composer; // EffectComposer used for SSAO ambient occlusion
   let defaultProperties = null;
-  
-  // Timer for debug output
-  let lastInertiaDebugTime = 0;
-  const INERTIA_DEBUG_INTERVAL = 10000; // 10 seconds in milliseconds
   
   let showDistanceInfo = false;
   let raycaster = new THREE.Raycaster();
@@ -754,7 +753,12 @@ function initSimulation() {
     lastFrameTime = currentTime - (elapsed % FRAME_DURATION);
     
     const dt = clock.getDelta();
-    
+
+    // Skip shadow re-rendering when paused — nothing in the scene moves, so
+    // the existing shadow map is still valid. This is a big win since the sim
+    // starts (and often stays) paused/docked.
+    renderer.shadowMap.autoUpdate = !paused;
+
     // Handle timed firing: check if any keys have exceeded their firing duration
     if (fineControlMode && timedFiringEnabled) {
       Object.entries(fineControlKeyStartTimes).forEach(([key, startTime]) => {
@@ -765,17 +769,6 @@ function initSimulation() {
           delete fineControlKeyStartTimes[key];
         }
       });
-    }
-    
-    // DEBUG: Print inertia matrix every 10 seconds
-    if (satBody && currentTime - lastInertiaDebugTime > INERTIA_DEBUG_INTERVAL) {
-      console.log("DEBUG: Inertia Matrix (10s interval):", {
-        x: satBody.inertia.x,
-        y: satBody.inertia.y,
-        z: satBody.inertia.z,
-        mass: satBody.mass
-      });
-      lastInertiaDebugTime = currentTime;
     }
     
     if (!specialThrusterModeEnabled && checkSpecialThrusterModeDate()) {
